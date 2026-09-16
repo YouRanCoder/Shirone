@@ -1,3 +1,0 @@
-[content] Content repository's .obsidian/ has no matching mount point and will not be synced. To sync it, declare it in shirone.content.json mounts.
-[content] Content repository's _templates/ has no matching mount point and will not be synced. To sync it, declare it in shirone.content.json mounts.
-{"message":"Dev server failed to start within 30s.","label":"SKIP_FORMAT","level":"error"}

@@ -81,3 +81,8 @@ artifacts/shirone-ai-*
 /public/assets/music/
 /public/assets/projects/
 /public/assets/anime/*.webp
+
+# local build/dev logs
+build2.log
+dev.log
+dev.err.log

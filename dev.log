@@ -1,9 +1,0 @@
-
-> shirone@1.0.0 dev D:\code\Shirone
-> node scripts/content/sync.mjs && node scripts/icons/generate-local-icons.mjs && node scripts/images/generate-moment-thumbnails.mjs && astro dev "--" "--port" "4321"
-
-[content] Materialized 19 files (updated 6, pruned 0), config overlays 25, content commit 33ffb87e
-[content] Content repository did not provide the following directories, corresponding code repository paths kept unchanged: assets
-[local-icons] Wrote 176 icons from 5 collections to src\generated\local-icon-collections.ts
-[moment-thumbnails] Reused thumbnail assets for 0 images.
- ELIFECYCLE  Command failed with exit code 1.
