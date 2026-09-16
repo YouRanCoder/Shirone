@@ -8,14 +8,9 @@ import { withUserConfig } from "../utils/config-overlay.ts";
 export const announcementConfig: AnnouncementConfig = withUserConfig(
 	"announcement",
 	{
-		title: "", // 公告标题，填空使用 i18n 字符串 Key.announcement
-		content: "The only way to do great work is to love what you do", // 公告内容
-		closable: true, // 允许用户关闭公告
-		link: {
-			enable: true, // 启用链接
-			text: "GitHub", // 链接文本
-			url: "https://github.com", // 链接 URL
-			external: true, // 外部链接
-		},
-	},
+  title: "声明",
+  content: "本站内容均为个人学习笔记，转载请注明出处。",
+  closable: false,
+  link: { enable: false, text: "", url: "", external: false },
+},
 );
