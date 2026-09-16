@@ -1,1 +1,16 @@
-{"projectId":"prj_BH8ZwokR2NDAMioxQZgxOQDK34Gx","orgId":"team_IjizQPnxvVuVIKEYWCi8yJXf","projectName":"youran-blog"}
+{
+  "projectId": "prj_BH8ZwokR2NDAMioxQZgxOQDK34Gx",
+  "orgId": "team_IjizQPnxvVuVIKEYWCi8yJXf",
+  "projectName": "youran-blog",
+  "settings": {
+    "createdAt": 1789544607691,
+    "framework": "astro",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
