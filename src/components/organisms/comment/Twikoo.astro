@@ -56,10 +56,13 @@ const twikooStylus = `/* =======================================================
 					white-space: nowrap
 					border: 0
 
-			&:has(> .el-loading-mask:not([style*="none"])) > .twikoo-skeleton
+			/* 1.x 用 el-loading-mask，2.x 改为 tk-loading-mask */
+			&:has(> .el-loading-mask:not([style*="none"])) > .twikoo-skeleton,
+			&:has(> .tk-loading-mask:not([style*="none"])) > .twikoo-skeleton
 				display: flex !important
 
-		.tk-comments-container .el-loading-spinner
+		.tk-comments-container .el-loading-spinner,
+		.tk-comments-container .tk-loading-spinner
 			display: none !important
 
 	.shirone-twikoo-wrapper .tk-comments
@@ -109,7 +112,8 @@ const twikooStylus = `/* =======================================================
 				color: var(--on-surface-variant) !important
 				opacity: 0.7
 
-		.el-input__count
+		.el-input__count,
+		.tk-input__count
 			right: 1rem
 			bottom: 0.5rem
 			background: transparent
@@ -123,7 +127,8 @@ const twikooStylus = `/* =======================================================
 		gap: var(--m3e-space-3, 0.75rem)
 		margin: 0 !important
 
-		> .el-input
+		> .el-input,
+		> .tk-input
 			display: grid !important
 			grid-template-columns: max-content minmax(0, 1fr)
 			width: 100% !important
@@ -143,10 +148,12 @@ const twikooStylus = `/* =======================================================
 			&:has(input:invalid)
 				border-color: var(--error)
 
-			+ .el-input
+			+ .el-input,
+			+ .tk-input
 				margin: 0 !important
 
-			.el-input-group__prepend
+			.el-input-group__prepend,
+			.tk-input-group__prepend
 				display: flex !important
 				align-items: center
 				width: auto
@@ -237,7 +244,8 @@ const twikooStylus = `/* =======================================================
 			background: var(--primary) !important
 			color: var(--on-primary) !important
 
-		.el-button + .el-button
+		.el-button + .el-button,
+		.tk-button + .tk-button
 			margin-left: var(--m3e-space-2, 0.5rem)
 
 	.shirone-twikoo-wrapper .tk-submit:has(.tk-input textarea:placeholder-shown)
