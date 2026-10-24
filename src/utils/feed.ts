@@ -6,8 +6,12 @@ import { isEncryptedPost } from "@utils/post-encryption";
 import { getPostUrl } from "@utils/url-utils";
 import MarkdownIt from "markdown-it";
 import sanitizeHtml from "sanitize-html";
+import { siteConfig } from "@/config/siteConfig";
 
-const parser = new MarkdownIt();
+// 与站点正文保持一致：段落内单个换行渲染为 `<br>`（Obsidian / Typora 语义）。
+const parser = new MarkdownIt({
+	breaks: siteConfig.markdown?.lineBreaks ?? true,
+});
 
 export interface FeedPostItem {
 	id: string;

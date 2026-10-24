@@ -35,6 +35,7 @@ import { remarkCollapsePanels } from "../plugins/markdown/remark-collapse-panels
 import { remarkContentAnnotations } from "../plugins/markdown/remark-content-annotations.mjs";
 import { remarkFields } from "../plugins/markdown/remark-fields.mjs";
 import { remarkIncludes } from "../plugins/markdown/remark-includes.mjs";
+import { remarkLineBreaks } from "../plugins/markdown/remark-line-breaks.mjs";
 import { remarkMarker } from "../plugins/markdown/remark-marker.mjs";
 import { remarkOptionGroups } from "../plugins/markdown/remark-option-groups.mjs";
 import { remarkYouTube } from "../plugins/markdown/remark-youtube.mjs";
@@ -84,6 +85,9 @@ export const siteRemarkPlugins = [
 	remarkMermaid,
 	remarkReadingTime,
 	remarkExcerpt,
+	// 段落内软换行 → `<br>`（Obsidian/Typora 语义）。排在阅读时间与摘要之后，
+	// 让统计和摘要仍按 CommonMark 原文计算；排在正文结构插件之前，不影响容器识别。
+	[remarkLineBreaks, { enabled: siteConfig.markdown?.lineBreaks ?? true }],
 	remarkDirective,
 	remarkAcFun,
 	remarkAudioReader,

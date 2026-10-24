@@ -150,8 +150,24 @@ Bun 对应的完整 Markdown 正文。
 
 SSR 输出不会预先隐藏任何面板，并重复输出每个面板标题，因此脚本不可用时仍能连续阅读全文。客户端模块只在页面实际包含 `.m3-option-group` 时动态加载，增强后才隐藏非活动面板并启用点击、方向键、Home/End、ARIA 状态、同 id 同步与记忆。初始化覆盖直接加载、Swup 内容替换和加密文章解锁；不使用 hydration、第三方依赖或网络请求。组件根节点使用 `not-prose`，选项栏保持单行并在自身范围内横向滑动；长标题截断但标签仍可点击，键盘切换只滚动该选项栏。窄屏边界和打印展开由 `markdown/option-groups.css` 完整拥有。独立演示页位于 `src/content/posts/option-groups.md`。
 
-## 4. 缓存与刷新
+## 3.2 段落内换行
 
+Shirone 默认按 **Obsidian / Typora 语义**渲染段落内的单个换行：源码里换行即输出 `<br>`，不必在行尾补两个空格或 `\`。该行为由 `remarkLineBreaks` 在 AST 层把 `text` 节点里的 `\n` 拆成 `break` 节点实现，只作用于段落、标题、引用、表格单元格内的行内容器。
+
+- 代码围栏、行内代码、数学、原始 HTML 与链接定义保持作者原文，不会被改写；
+- 行尾两个空格和 `\` 仍然生效，且不会重复插入 `<br>`；
+- 段与段之间仍需空行，空行不会被解释为换行；
+- 摘要与字数统计在换行改写之前计算，`remarkPluginFrontmatter.minutes` / `words` 不受影响；
+- 想回到 CommonMark 软换行，在内容仓 `config/site.yaml` 里写：
+
+```yaml
+markdown:
+  lineBreaks: false
+```
+
+同一开关也作用于 RSS/Atom 输出（`src/utils/feed.ts` 用 `markdown-it` 的 `breaks` 选项），保证订阅端看到的换行与站内一致。
+
+## 4. 缓存与刷新
 修改 remark/rehype 插件后，Astro dev 可能继续提供旧的 Markdown 编译结果。典型信号是：新 CSS 已出现，但插件新增的 class 或 DOM 结构不存在。
 
 Windows 下的最小刷新流程：

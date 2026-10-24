@@ -27,6 +27,7 @@
 | 树与代码 | `remarkFileTree`、`remarkCodeTree` | `remarkMermaid` 之前；探针之前 | 生成文件树、代码树节点并保留嵌套归属 |
 | Mermaid | `remarkMermaid` | 探针之前 | 归一化 Mermaid 节点或代码块 |
 | 统计与摘要 | `remarkReadingTime`、`remarkExcerpt` | 不得消费未解析的作者 directive | 生成文章统计和摘要元数据 |
+| 换行语义 | `remarkLineBreaks` | `remarkReadingTime`、`remarkExcerpt` 之后；`remarkDirective` 之前 | 把段落内软换行（`text` 节点里的 `\n`）拆成 `break` 节点，对齐 Obsidian / Typora 的换行语义 |
 | Directive 解析 | `remarkDirective` | 所有 directive 归一化插件之后 | 将 `::`、`:::`、`{.class}` 等输入解析为 directive AST |
 | 能力探针 | `remarkFeatureProbes` | `remarkDirective` 之后；`remarkSectionize`、`parseDirectiveNode` 之前 | 根据规范化 AST 写入 `remarkPluginFrontmatter.markdownSyntaxes` |
 | 章节结构 | `remarkSectionize` | 能力探针之后 | 生成文章章节结构，不得改变能力快照 |
@@ -38,6 +39,7 @@
 - `remarkFeatureProbes` 不得提前到 `remarkDirective` 之前。`::github{...}` 等叶子指令在解析前仍是文本，提前探测会导致页面 HTML 有组件而 `remarkPluginFrontmatter.markdownSyntaxes` 为空。
 - `remarkCodeTree` 内部的 fenced code 不得被重复记为 `expressive-code`；探针必须根据父级容器排除代码树子节点。
 - `parseDirectiveNode` 只能在所有会修改 directive 名称、属性或子节点的插件之后执行。它是 Remark 到 Rehype 的桥接步骤，不是作者语法探针。
+- `remarkLineBreaks` 只能改写 `text` 节点，且跳过 `code`、`inlineCode`、`html`、`definition`、`math` 等作者原文容器。它必须排在 `remarkReadingTime`、`remarkExcerpt` 之后，让字数统计与摘要仍按原始 Markdown 文本计算；排在 `remarkDirective` 之前，使 directive 标签文本也能获得同样的换行语义。行为由 `siteConfig.markdown.lineBreaks`（默认 `true`）控制。
 
 ### 2.2 视频 Facade 验证
 

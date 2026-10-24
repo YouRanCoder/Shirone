@@ -652,6 +652,36 @@
       ],
       "description": "Markdown 正文图片处理配置。"
     },
+    "markdown": {
+      "anyOf": [
+        {},
+        {
+          "type": "object",
+          "properties": {
+            "lineBreaks": {
+              "anyOf": [
+                {},
+                {
+                  "type": "boolean",
+                  "enum": [
+                    false
+                  ]
+                },
+                {
+                  "type": "boolean",
+                  "enum": [
+                    true
+                  ]
+                }
+              ],
+              "description": "段落内单个换行是否渲染为 `<br>`（Obsidian / Typora 语义）；默认 `true`，设为 `false` 回到 CommonMark 软换行（折叠为空格）。"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "Markdown 正文排版配置。"
+    },
     "toc": {
       "type": "object",
       "properties": {

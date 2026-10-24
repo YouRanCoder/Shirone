@@ -111,6 +111,13 @@ export const siteConfig: SiteConfig = withUserConfig("site", {
 		// 为需要防盗链兼容的图片 CDN 添加 referrerpolicy="no-referrer"，支持通配符。
 		noReferrerDomains: ["*.hdslb.com"],
 	},
+	// Markdown 正文排版行为。
+	markdown: {
+		// 段落内单个换行渲染为 <br>（Obsidian / Typora 语义），
+		// 从 Obsidian 写作过来的内容不必再手动加行尾两空格。
+		// 设为 false 回到 CommonMark 软换行，行内换行会被折叠成一个空格。
+		lineBreaks: true,
+	},
 	toc: {
 		enable: true, // Display the table of contents on the right side of the post
 		depth: 2, // Maximum heading depth to show in the table, from 1 to 3

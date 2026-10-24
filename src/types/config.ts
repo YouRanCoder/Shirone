@@ -122,6 +122,11 @@ export type SiteConfig = {
 		/** 添加 `referrerpolicy="no-referrer"` 的远程图片域名，支持 `*.example.com` 通配符。 */
 		noReferrerDomains?: string[];
 	};
+	/** Markdown 正文排版配置。 */
+	markdown?: {
+		/** 段落内单个换行是否渲染为 `<br>`（Obsidian / Typora 语义）；默认 `true`，设为 `false` 回到 CommonMark 软换行（折叠为空格）。 */
+		lineBreaks?: boolean;
+	};
 	toc: {
 		enable: boolean;
 		depth: 1 | 2 | 3;
