@@ -26,6 +26,13 @@ packages:
 # upgrade silently changes which versions install.
 minimumReleaseAge: 1440
 
+# pagefind 1.6.0 ships platform binaries that are not present in the registry
+# manifest, so the age policy cannot verify them and a strict run rejects the
+# whole lockfile. Allowlist only those two optional packages.
+minimumReleaseAgeExclude:
+  - "@pagefind/linux-arm64@1.6.0"
+  - "@pagefind/windows-arm64@1.6.0"
+
 # Build-script approval, split across the two key names because the setting moved
 # between pnpm majors: `allowBuilds` is pnpm 11, `onlyBuiltDependencies` is
 # pnpm 10 and earlier. Both are present so a single checkout installs on either.
