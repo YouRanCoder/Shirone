@@ -746,20 +746,54 @@
 			"category": "container",
 			"source": "shirone",
 			"summary": "将 API、组件 Props 或配置字段渲染为结构化参数卡片。",
-			"forms": [{"kind": "container-directive", "pattern": ":::: field-group ... ::: field name ... ::::", "example": ":::: field-group\\n\\n::: field title\\n@type string\\n@optional\\n\\nDescription.\\n:::\\n\\n::::"}],
-			"attributes": [
-				{"name": "name", "required": true, "values": "non-empty text", "default": null},
-				{"name": "@type", "required": false, "values": "text", "default": null},
-				{"name": "@default", "required": false, "values": "text", "default": null},
-				{"name": "@required | @optional | @deprecated", "required": false, "values": "flag", "default": null}
+			"forms": [
+				{
+					"kind": "container-directive",
+					"pattern": ":::: field-group ... ::: field name ... ::::",
+					"example": ":::: field-group\\n\\n::: field title\\n@type string\\n@optional\\n\\nDescription.\\n:::\\n\\n::::"
+				}
 			],
-			"implementation": ["src/plugins/markdown/remark-fields.mjs", "src/plugins/markdown/containers/rehype-fields.mjs"],
+			"attributes": [
+				{
+					"name": "name",
+					"required": true,
+					"values": "non-empty text",
+					"default": null
+				},
+				{
+					"name": "@type",
+					"required": false,
+					"values": "text",
+					"default": null
+				},
+				{
+					"name": "@default",
+					"required": false,
+					"values": "text",
+					"default": null
+				},
+				{
+					"name": "@required | @optional | @deprecated",
+					"required": false,
+					"values": "flag",
+					"default": null
+				}
+			],
+			"implementation": [
+				"src/plugins/markdown/remark-fields.mjs",
+				"src/plugins/markdown/containers/rehype-fields.mjs"
+			],
 			"registeredIn": "src/utils/markdown-processor.mjs",
 			"styles": ["src/styles/markdown/fields.css"],
-			"runtime": {"mode": "none", "modules": [], "network": []},
-			"docs": ["src/content/posts/markdown-fields.md", "docs/markdown-extensions.md"],
+			"runtime": { "mode": "none", "modules": [], "network": [] },
+			"docs": [
+				"src/content/posts/markdown-fields.md",
+				"docs/markdown-extensions.md"
+			],
 			"tests": ["tests/plugins/markdown/containers/fields.test.mjs"],
-			"notes": ["无效或不完整的字段标签保留为可读 Markdown；组件为纯 SSR 输出，不增加客户端运行时。"]
+			"notes": [
+				"无效或不完整的字段标签保留为可读 Markdown；组件为纯 SSR 输出，不增加客户端运行时。"
+			]
 		},
 		{
 			"id": "file-tree",
@@ -882,8 +916,8 @@
 					"kind": "container-directive",
 					"pattern": ":::grid{columns=\"1..6\" aspect=\"W/H\" fit=\"cover|contain\"} ... :::",
 					"example": ":::grid{columns=\"3\" aspect=\"16/9\" fit=\"cover\"}\n![说明](./one.webp)\n![说明](./two.webp)\n:::"
-		}
-	],
+				}
+			],
 			"attributes": [
 				{
 					"name": "columns",
@@ -947,7 +981,10 @@
 					"default": null
 				}
 			],
-			"implementation": ["src/plugins/rehype-markdown-images.mjs"],
+			"implementation": [
+				"src/plugins/rehype-markdown-images.mjs",
+				"src/plugins/markdown/core/image-line.mjs"
+			],
 			"registeredIn": "src/utils/markdown-processor.mjs",
 			"styles": ["src/styles/markdown/image-presentations.css"],
 			"runtime": {
@@ -955,12 +992,11 @@
 				"modules": [],
 				"network": ["author-declared image URLs only"]
 			},
-			"docs": [
-				"src/content/posts/spoilers.md",
-				"docs/markdown-extensions.md"
-			],
+			"docs": ["src/content/posts/spoilers.md", "docs/markdown-extensions.md"],
 			"tests": ["tests/plugins/rehype-markdown-images.test.mjs"],
-			"notes": ["非法或越界宽度令牌保留在 alt，不静默改写。"]
+			"notes": [
+				"图片独占一行时可紧邻正文或连续出现；行内混排图片不生成图注。非法或越界宽度令牌保留在 alt，不静默改写。"
+			]
 		},
 		{
 			"id": "include",
@@ -1103,6 +1139,7 @@
 				"src/content/posts/markdown.md"
 			],
 			"tests": [
+				"tests/plugins/markdown/katex-package-mode.test.mjs",
 				"tests/plugins/markdown/katex-version.test.mjs",
 				"tests/site/math.spec.ts",
 				"tests/site/post-encryption.spec.ts"
@@ -1124,12 +1161,19 @@
 				}
 			],
 			"attributes": [],
-			"implementation": ["src/plugins/remark-mermaid.mjs"],
+			"implementation": [
+				"src/plugins/remark-mermaid.mjs",
+				"src/plugins/rehype-mermaid-fallback.mjs"
+			],
 			"registeredIn": "src/utils/markdown-processor.mjs",
 			"styles": ["src/styles/mermaid.css"],
 			"runtime": {
 				"mode": "client-enhanced",
-				"modules": ["src/utils/mermaid.ts", "src/utils/mermaid-interaction.ts"],
+				"modules": [
+					"src/utils/mermaid.ts",
+					"src/utils/mermaid-config.ts",
+					"src/utils/mermaid-interaction.ts"
+				],
 				"network": []
 			},
 			"docs": [

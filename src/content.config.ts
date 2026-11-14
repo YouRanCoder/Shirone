@@ -17,7 +17,39 @@ const postsCollection = defineCollection({
 		image: z.string().optional().default(""),
 		tags: z.array(z.string()).optional().default([]),
 		category: z.string().optional().nullable().default(""),
+		/** 所属系列 slug（空 = 不属于任何系列；单归属；落库前统一 trim） */
+		series: z
+			.string()
+			.optional()
+			.default("")
+			.transform((value) => value.trim()),
+		/** 系列内顺序；缺省回退为按发布日期排 */
+		seriesOrder: z.number().int().optional(),
 		lang: z.string().optional().default(""),
+
+		/* 单篇版权覆写（省略字段回退到全站 licenseConfig；字符串简写许可证名称） */
+		license: z
+			.union([
+				z.string(),
+				z.object({
+					enable: z.boolean().optional(),
+					name: z.string().optional(),
+					url: z.string().optional(),
+					/** 作者：字符串或 { name, url } */
+					author: z
+						.union([
+							z.string(),
+							z.object({
+								name: z.string().optional(),
+								url: z.string().optional(),
+							}),
+						])
+						.optional(),
+					/** 转载来源链接；留空表示原创 */
+					source: z.string().optional(),
+				}),
+			])
+			.optional(),
 
 		/* Post Encryption */
 		encrypted: z.boolean().optional().default(false),
@@ -47,13 +79,26 @@ const specCollection = defineCollection({
 	schema: z.object({}),
 });
 
+/**
+ * 系列实体集合：每篇 = 一个系列。body 是可选总览，未写则系列页仅列文章。
+ * defaultCategory 是回退值（显式 category 优先），解析见 utils/series-utils.ts。
+ */
+const seriesCollection = defineCollection({
+	loader: glob({ base: "./src/content/series", pattern: "**/*.md" }),
+	schema: z.object({
+		title: z.string(),
+		status: z.enum(["ongoing", "completed"]).optional().default("ongoing"),
+		defaultCategory: z.string().optional().default(""),
+	}),
+});
+
 const momentsCollection = defineCollection({
 	loader: glob({ base: "./src/content/moments", pattern: "**/*.md" }),
 	schema: z.object({
 		published: z.date(),
 		pinned: z.boolean().optional().default(false),
 		location: z.string().optional().default(""),
-		/** 心情（Iconify 图标名，如 material-symbols:sentiment-excited-outline-rounded） */
+		/** Mood icon (Iconify name, e.g. `material-symbols:sentiment-excited-outline-rounded`). */
 		mood: z.string().optional().default(""),
 		tags: z.array(z.string()).optional().default([]),
 		images: z
@@ -65,6 +110,13 @@ const momentsCollection = defineCollection({
 			)
 			.optional()
 			.default([]),
+		/* Moment encryption */
+		encrypted: z.boolean().optional().default(false),
+		password: z
+			.union([z.string(), z.number()])
+			.transform((value) => String(value))
+			.optional(),
+		passwordHint: z.string().optional().default(""),
 		draft: z.boolean().optional().default(false),
 	}),
 });
@@ -72,5 +124,6 @@ const momentsCollection = defineCollection({
 export const collections = {
 	posts: postsCollection,
 	spec: specCollection,
+	series: seriesCollection,
 	moments: momentsCollection,
 } as const;

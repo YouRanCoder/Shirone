@@ -38,6 +38,7 @@ import { remarkIncludes } from "../plugins/markdown/remark-includes.mjs";
 import { remarkLineBreaks } from "../plugins/markdown/remark-line-breaks.mjs";
 import { remarkMarker } from "../plugins/markdown/remark-marker.mjs";
 import { remarkOptionGroups } from "../plugins/markdown/remark-option-groups.mjs";
+import { remarkRestoreBareDirectives } from "../plugins/markdown/remark-restore-bare-directives.mjs";
 import { remarkYouTube } from "../plugins/markdown/remark-youtube.mjs";
 import { AcFunComponent } from "../plugins/rehype-component-acfun.mjs";
 import { AdmonitionComponent } from "../plugins/rehype-component-admonition.mjs";
@@ -50,6 +51,7 @@ import { MarkerComponent } from "../plugins/rehype-component-marker.mjs";
 import { SpoilerComponent } from "../plugins/rehype-component-spoiler.mjs";
 import { YouTubeComponent } from "../plugins/rehype-component-youtube.mjs";
 import { rehypeMarkdownImages } from "../plugins/rehype-markdown-images.mjs";
+import { rehypeMermaidFallback } from "../plugins/rehype-mermaid-fallback.mjs";
 import { rehypeResponsiveTables } from "../plugins/rehype-responsive-tables.mjs";
 import { parseDirectiveNode } from "../plugins/remark-directive-rehype.js";
 import { remarkEscapeNumericColons } from "../plugins/remark-escape-numeric-colons.mjs";
@@ -89,6 +91,7 @@ export const siteRemarkPlugins = [
 	// 让统计和摘要仍按 CommonMark 原文计算；排在正文结构插件之前，不影响容器识别。
 	[remarkLineBreaks, { enabled: siteConfig.markdown?.lineBreaks ?? true }],
 	remarkDirective,
+	remarkRestoreBareDirectives,
 	remarkAcFun,
 	remarkAudioReader,
 	remarkArtPlayer,
@@ -178,6 +181,7 @@ export const siteRehypePlugins = [
 		},
 	],
 	rehypeResponsiveTables,
+	rehypeMermaidFallback,
 ];
 
 /**

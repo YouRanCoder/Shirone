@@ -23,13 +23,17 @@ const pages = [
 	{ name: "技能", path: "/skills/" },
 	{ name: "项目", path: "/projects/" },
 	{ name: "设备展示", path: "/devices/" },
+	{ name: "游戏", path: "/games/" },
 	{ name: "时间线", path: "/timeline/" },
 	{ name: "受保护相册", path: "/albums/EncryptedExample/" },
 	{ name: "关于", path: "/about/" },
 	{ name: "文章页", path: "/posts/guide/" },
 	{ name: "MDX文章页", path: "/posts/mdx-showcase/" },
+	{ name: "系列文章页", path: "/posts/markdown-extended/" },
 	{ name: "分类索引", path: "/categories/" },
 	{ name: "标签索引", path: "/tags/" },
+	{ name: "系列索引", path: "/series/" },
+	{ name: "系列详情", path: "/series/markdown-syntax-guide/" },
 ];
 
 const DISABLED_RULES = ["page-has-heading-one"];
@@ -72,10 +76,13 @@ async function openSitePage(
 		}),
 	);
 	await page.goto(path, { waitUntil: "domcontentloaded" });
-	// 等待主题引擎初始化（HCT 动态配色写入 :root）
+	// 等待配色就绪（默认配色为静态 CSS；非默认配色由 HCT 写入 :root）
 	await page.waitForFunction(() => {
 		const root = document.documentElement;
-		return root.style.getPropertyValue("--mc-primary").trim().startsWith("#");
+		return getComputedStyle(root)
+			.getPropertyValue("--mc-primary")
+			.trim()
+			.startsWith("#");
 	});
 	// 等待 onload-animation 全部收敛（跳过 display:none 元素），防止动画中间帧
 	await page.waitForFunction(

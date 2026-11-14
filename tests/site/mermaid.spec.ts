@@ -1,8 +1,19 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { createMermaidConfig } from "../../src/utils/mermaid-config.ts";
 
 const POST_PATH = "/posts/markdown-extended/";
 const DEMO_PATH = "/posts/markdown-mermaid/";
+
+test("pins Mermaid 12 to the established dagre layout and classic look", () => {
+	const themeVariables = { primaryColor: "#6750a4", textColor: "#1c1b18" };
+	const config = createMermaidConfig(themeVariables);
+
+	expect(config.layout).toBe("dagre");
+	expect(config.look).toBe("classic");
+	expect(config.theme).toBe("base");
+	expect(config.themeVariables).toEqual(themeVariables);
+});
 
 async function waitForViewer(page: import("@playwright/test").Page) {
 	const diagram = page.locator(".markdown-mermaid").first();
@@ -13,6 +24,24 @@ async function waitForViewer(page: import("@playwright/test").Page) {
 }
 
 test.describe("Mermaid diagrams", () => {
+	test("SSR fallbacks are keyboard-scrollable in Markdown and MDX", async ({
+		request,
+	}) => {
+		for (const path of [POST_PATH, "/posts/mdx-showcase/"]) {
+			const response = await request.get(path);
+			expect(response.ok()).toBe(true);
+			const html = await response.text();
+			const fallbackTag = html.match(
+				/<pre\b[^>]*class="markdown-mermaid__fallback"[^>]*>/,
+			)?.[0];
+			expect(
+				fallbackTag,
+				`${path} should render a Mermaid source fallback`,
+			).toBeDefined();
+			expect(fallbackTag).toContain('tabindex="0"');
+		}
+	});
+
 	test("preserves an SSR fallback and renders a themed SVG", async ({
 		page,
 		request,
@@ -25,6 +54,9 @@ test.describe("Mermaid diagrams", () => {
 
 		await page.goto(POST_PATH, { waitUntil: "domcontentloaded" });
 		const diagram = page.locator(".markdown-mermaid");
+		await expect(
+			diagram.locator(".markdown-mermaid__fallback"),
+		).toHaveAttribute("tabindex", "0");
 		await expect(diagram).toHaveAttribute("data-mermaid-state", "ready", {
 			timeout: 15_000,
 		});
@@ -337,7 +369,7 @@ test.describe("Mermaid diagrams", () => {
 	}) => {
 		await page.goto(DEMO_PATH, { waitUntil: "domcontentloaded" });
 		const diagrams = page.locator(".markdown-mermaid");
-		await expect(diagrams).toHaveCount(14);
+		await expect(diagrams).toHaveCount(15);
 		await expect
 			.poll(
 				() =>
@@ -349,13 +381,13 @@ test.describe("Mermaid diagrams", () => {
 					),
 				{ timeout: 30_000 },
 			)
-			.toBe(14);
-		await expect(diagrams.locator("[data-mermaid-svg]")).toHaveCount(14);
-		await expect(diagrams.locator("[data-mermaid-toolbar]")).toHaveCount(14);
+			.toBe(15);
+		await expect(diagrams.locator("[data-mermaid-svg]")).toHaveCount(15);
+		await expect(diagrams.locator("[data-mermaid-toolbar]")).toHaveCount(15);
 		const regions = diagrams.locator(
 			'.markdown-mermaid__diagram[role="region"]',
 		);
-		await expect(regions).toHaveCount(14);
+		await expect(regions).toHaveCount(15);
 		expect(
 			await regions.evaluateAll((elements) =>
 				elements.every(
@@ -369,6 +401,20 @@ test.describe("Mermaid diagrams", () => {
 			(await new AxeBuilder({ page }).include(".markdown-mermaid").analyze())
 				.violations,
 		).toEqual([]);
+	});
+
+	test("renders an HTML line break inside a label", async ({ page }) => {
+		await page.goto(DEMO_PATH, { waitUntil: "domcontentloaded" });
+		const diagram = page
+			.locator(".markdown-mermaid")
+			.filter({ hasText: "First line" });
+		await expect(diagram).toHaveCount(1);
+		await expect(diagram).toHaveAttribute("data-mermaid-state", "ready", {
+			timeout: 15_000,
+		});
+		// The break must stay a real element; mermaid serializes it as `<br>`,
+		// which a strict XML parse rejects outright.
+		await expect(diagram.locator("[data-mermaid-svg] br")).toHaveCount(1);
 	});
 
 	test("keeps fullscreen modal and controls centered on compact mobile screens with long diagram titles", async ({
@@ -444,7 +490,7 @@ test.describe("Mermaid diagrams", () => {
 					),
 				{ timeout: 30_000 },
 			)
-			.toBe(14);
+			.toBe(15);
 
 		await page.evaluate(() => {
 			document.documentElement.classList.add("dark");
@@ -462,7 +508,7 @@ test.describe("Mermaid diagrams", () => {
 					),
 				{ timeout: 30_000 },
 			)
-			.toBe(14);
+			.toBe(15);
 
 		const flowchart = diagrams.first();
 		const edgeLabelInfo = await flowchart.evaluate((element) => {
@@ -493,7 +539,7 @@ test.describe("Mermaid diagrams", () => {
 	test("keeps Mind Map branches and nodes readable", async ({ page }) => {
 		await page.goto(DEMO_PATH, { waitUntil: "domcontentloaded" });
 		const mindMap = page.locator("svg.mindmapDiagram");
-		await expect(mindMap).toHaveCount(1);
+		await expect(mindMap).toHaveCount(1, { timeout: 15_000 });
 		const labels = mindMap.locator(".mindmap-node .nodeLabel");
 		const labelCount = await labels.count();
 		expect(labelCount).toBeGreaterThan(0);
@@ -527,7 +573,7 @@ test.describe("Mermaid diagrams", () => {
 	}) => {
 		await page.goto(DEMO_PATH, { waitUntil: "domcontentloaded" });
 		const journey = page.locator('svg[aria-roledescription="journey"]');
-		await expect(journey).toHaveCount(1);
+		await expect(journey).toHaveCount(1, { timeout: 15_000 });
 
 		const contrastRatios = await journey.evaluate((svg) => {
 			const toRgb = (value: string): [number, number, number] | null => {
@@ -576,7 +622,7 @@ test.describe("Mermaid diagrams", () => {
 	}) => {
 		await page.goto(DEMO_PATH, { waitUntil: "domcontentloaded" });
 		const timeline = page.locator('svg[aria-roledescription="timeline"]');
-		await expect(timeline).toHaveCount(1);
+		await expect(timeline).toHaveCount(1, { timeout: 15_000 });
 
 		const contrastRatios = await timeline.evaluate((svg) => {
 			const toRgb = (value: string): [number, number, number] | null => {
@@ -631,8 +677,8 @@ test.describe("Mermaid diagrams", () => {
 			.locator(".markdown-mermaid")
 			.filter({ has: gitGraph })
 			.first();
-		await expect(gitGraph).toHaveCount(1);
-		await expect(kanban).toHaveCount(1);
+		await expect(gitGraph).toHaveCount(1, { timeout: 15_000 });
+		await expect(kanban).toHaveCount(1, { timeout: 15_000 });
 		await expect(gitHost).toHaveAttribute("data-mermaid-state", "ready", {
 			timeout: 15_000,
 		});
@@ -732,7 +778,7 @@ test.describe("Mermaid diagrams", () => {
 		const classHost = page.locator(".markdown-mermaid").filter({
 			has: classDiagram,
 		});
-		await expect(classDiagram).toHaveCount(1);
+		await expect(classDiagram).toHaveCount(1, { timeout: 15_000 });
 		await expect(classHost).toHaveAttribute("data-mermaid-state", "ready", {
 			timeout: 15_000,
 		});

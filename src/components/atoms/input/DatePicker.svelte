@@ -9,6 +9,11 @@
  * 用法：<DatePicker bind:value={date} />
  *      <DatePicker bind:value={date} locale="en-US" />
  */
+import {
+	createGregorianDateFormatter,
+	getLocaleWeekStart,
+} from "@utils/locale-utils";
+
 let {
 	value = $bindable(""),
 	label = "选择日期",
@@ -19,7 +24,7 @@ let {
 	/** 选中日期 ISO "YYYY-MM-DD"（$bindable） */
 	value?: string;
 	label?: string;
-	/** 本地化（周起始/星期名） */
+	/** 本地化周起始、星期名和日期文案；日期使用公历与拉丁数字以匹配网格 */
 	locale?: string;
 	/** 选择变化回调 */
 	onchange?: (date: string) => void;
@@ -31,18 +36,11 @@ let viewYear = $state(2026);
 let viewMonth = $state(0);
 let today = $state("");
 
-// 初始化
-const weekStart = $derived(
-	(() => {
-		// 周一=1（zh）/ 周日=0（en）按 locale 周起始
-		const t = new Intl.Locale(locale);
-		const w = t.weekInfo?.firstDay ?? 1;
-		return w; // 1 = Monday, 7 = Sunday
-	})(),
-);
+// 周一=1（zh-CN）/ 周日=7（en-US）按 locale 周起始
+const weekStart = $derived(getLocaleWeekStart(locale));
 
 function init() {
-	const d = value ? new Date(value + "T00:00:00") : new Date();
+	const d = value ? new Date(`${value}T00:00:00`) : new Date();
 	if (!Number.isNaN(d.getTime())) {
 		viewYear = d.getFullYear();
 		viewMonth = d.getMonth();
@@ -89,11 +87,20 @@ const weekNames = $derived(
 	})(),
 );
 
-const monthTitle = $derived(
-	new Intl.DateTimeFormat(locale, { year: "numeric", month: "long" }).format(
-		new Date(viewYear, viewMonth, 1),
-	),
+const monthTitleFormatter = $derived(
+	createGregorianDateFormatter(locale, { year: "numeric", month: "long" }),
 );
+const monthTitle = $derived(
+	monthTitleFormatter.format(new Date(viewYear, viewMonth, 1)),
+);
+const dateLabelFormatter = $derived(
+	createGregorianDateFormatter(locale, { dateStyle: "full" }),
+);
+
+function formatDateLabel(iso: string): string {
+	// Keep the accessible date in sync with the Gregorian, Latin-numbered grid.
+	return dateLabelFormatter.format(new Date(`${iso}T00:00:00`));
+}
 
 function prevMonth() {
 	if (viewMonth === 0) {
@@ -141,7 +148,7 @@ function select(iso: string) {
                     class:m3-date-picker__day--selected={value === cell.iso}
                     class:m3-date-picker__day--today={today === cell.iso}
                     aria-pressed={value === cell.iso}
-                    aria-label={cell.iso}
+                    aria-label={formatDateLabel(cell.iso)}
                     onclick={() => select(cell.iso)}
                 >
                     {cell.day}

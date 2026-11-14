@@ -5,10 +5,12 @@
  * 应用于 src/data/*.ts 的内容数据集合。
  */
 import { devicesData } from "../data/devices.ts";
+import { gamesData } from "../data/games.ts";
 import { projectsData } from "../data/projects.ts";
 import { skillsData } from "../data/skills.ts";
 import { timelineData } from "../data/timeline.ts";
 import type { DeviceItem, DevicesConfig } from "../types/devicesConfig.ts";
+import type { GameItem, GamesConfig } from "../types/gamesConfig.ts";
 import type { ProjectItem, ProjectsConfig } from "../types/projectsConfig.ts";
 import type { SkillItem, SkillsConfig } from "../types/skillsConfig.ts";
 import type { TimelineConfig, TimelineItem } from "../types/timelineConfig.ts";
@@ -111,9 +113,12 @@ export function resolveSkillsData(
  * 排序主要基于起始时间（若起始时间相同则比较结束时间）。
  * 无法识别的格式返回负无穷（desc排在末尾）。
  */
-export function parseTimelineDateKey(dateStr: string): { start: number; end: number } {
+export function parseTimelineDateKey(dateStr: string): {
+	start: number;
+	end: number;
+} {
 	if (!dateStr || typeof dateStr !== "string") {
-		return { start: -Infinity, end: -Infinity };
+		return { start: Number.NEGATIVE_INFINITY, end: Number.NEGATIVE_INFINITY };
 	}
 
 	const parts = dateStr.split(/\s*(?:–|-|—|~|to)\s*/i);
@@ -121,7 +126,8 @@ export function parseTimelineDateKey(dateStr: string): { start: number; end: num
 	const endPart = parts[1]?.trim();
 
 	const parseSingleDate = (str: string | undefined, isEnd = false): number => {
-		if (!str) return isEnd ? -Infinity : -Infinity;
+		if (!str)
+			return isEnd ? Number.NEGATIVE_INFINITY : Number.NEGATIVE_INFINITY;
 		const normalized = str.toLowerCase();
 		if (
 			normalized === "present" ||
@@ -129,19 +135,19 @@ export function parseTimelineDateKey(dateStr: string): { start: number; end: num
 			normalized === "current" ||
 			str.includes("今")
 		) {
-			return Infinity;
+			return Number.POSITIVE_INFINITY;
 		}
 
 		// 匹配形如 2026.08, 2026-08, 2026/08, 2026.08.12
 		const match = str.match(/(\d{4})(?:[.\-/](\d{1,2}))?(?:[.\-/](\d{1,2}))?/);
-		if (!match) return -Infinity;
+		if (!match) return Number.NEGATIVE_INFINITY;
 
 		const year = Number.parseInt(match[1], 10);
-		const month = match[2] ? Number.parseInt(match[2], 10) - 1 : (isEnd ? 11 : 0);
-		const day = match[3] ? Number.parseInt(match[3], 10) : (isEnd ? 28 : 1);
+		const month = match[2] ? Number.parseInt(match[2], 10) - 1 : isEnd ? 11 : 0;
+		const day = match[3] ? Number.parseInt(match[3], 10) : isEnd ? 28 : 1;
 
 		const d = new Date(Date.UTC(year, month, day));
-		return Number.isNaN(d.getTime()) ? -Infinity : d.getTime();
+		return Number.isNaN(d.getTime()) ? Number.NEGATIVE_INFINITY : d.getTime();
 	};
 
 	const start = parseSingleDate(startPart, false);
@@ -210,6 +216,30 @@ export function resolveDevicesData(
 			? item.image.startsWith("/")
 				? url(item.image)
 				: item.image
+			: undefined,
+	}));
+}
+
+/**
+ * 解析游戏页展示数据。
+ */
+export function resolveGamesData(
+	config: GamesConfig,
+	customItems?: readonly GameItem[],
+): GameItem[] {
+	const source = customItems ?? config.items ?? gamesData;
+	const enabledItems = source.filter((item) => item.enable !== false);
+	const filtered = filterByDisabledKeys(
+		enabledItems,
+		config.disabledIds ?? config.disabledKeys,
+		(item) => item.id,
+	);
+	return filtered.map((item) => ({
+		...item,
+		cover: item.cover
+			? item.cover.startsWith("/")
+				? url(item.cover)
+				: item.cover
 			: undefined,
 	}));
 }

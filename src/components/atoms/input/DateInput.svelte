@@ -58,9 +58,9 @@ function onInput(e: Event) {
 function validate(s: string): string {
 	const m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
 	if (!m) return "格式应为 YYYY/MM/DD";
-	const y = +m[1],
-		mo = +m[2],
-		d = +m[3];
+	const y = +m[1];
+	const mo = +m[2];
+	const d = +m[3];
 	const [minY = 1900, maxY = new Date().getFullYear()] = yearRange ?? [];
 	if (y < minY || y > maxY) return `年份需在 ${minY}-${maxY} 之间`;
 	if (mo < 1 || mo > 12) return "月份无效";
@@ -134,12 +134,12 @@ function onBlur() {
     align-items: center
     gap: 12px
     padding: 0 16px
-    background: var(--surface-container-high)
+    background: var(--field-filled-bg)
     border-radius: var(--shape-corner-xs) var(--shape-corner-xs) 0 0
     transition: background-color var(--m3e-duration-short) var(--m3e-easing-standard)
 
     &:hover
-        background: var(--surface-container-higher, var(--surface-container-high))
+        background: unquote("color-mix(in oklab, var(--on-surface) 12%, var(--field-filled-bg))")
 
     &__icon
         display: flex

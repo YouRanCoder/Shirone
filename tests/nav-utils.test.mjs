@@ -15,9 +15,20 @@ test("resolvePageKey handles root deployment", () => {
 		resolvePageKey(new URL("https://example.com/friends/")),
 		"friends",
 	);
+	assert.equal(resolvePageKey(new URL("https://example.com/games/")), "games");
 	assert.equal(
 		resolvePageKey(new URL("https://example.com/albums/AcgExample/")),
 		"albums",
+	);
+	// The nav registers a `series` entry, so both the overview and every
+	// detail page must resolve to it or the item never gets aria-current.
+	assert.equal(
+		resolvePageKey(new URL("https://example.com/series/")),
+		"series",
+	);
+	assert.equal(
+		resolvePageKey(new URL("https://example.com/series/media-embeds/")),
+		"series",
 	);
 	assert.equal(
 		resolvePageKey(new URL("https://example.com/archive/?category=Guides")),
@@ -38,6 +49,10 @@ test("resolvePageKey handles subpath deployment with base override", () => {
 	assert.equal(
 		resolvePageKey(new URL("https://example.com/Shirone/friends/"), base),
 		"friends",
+	);
+	assert.equal(
+		resolvePageKey(new URL("https://example.com/Shirone/games/"), base),
+		"games",
 	);
 	assert.equal(
 		resolvePageKey(

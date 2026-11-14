@@ -111,9 +111,7 @@ export function setWallpaperMode(mode: WallpaperMode): void {
 }
 
 export function getDefaultHue(): number {
-	const fallback = "250";
-	const configCarrier = document.getElementById("config-carrier");
-	return Number.parseInt(configCarrier?.dataset.hue || fallback, 10);
+	return siteConfig.themeColor.hue;
 }
 
 export function getHue(): number {
@@ -131,7 +129,7 @@ export function setHue(hue: number): void {
 	applyCurrentScheme();
 }
 
-export function applyThemeToDocument(theme: LIGHT_DARK_MODE) {
+export function applyThemeToDocument(theme: LIGHT_DARK_MODE): void {
 	switch (theme) {
 		case LIGHT_MODE:
 			document.documentElement.classList.remove("dark");

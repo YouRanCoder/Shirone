@@ -24,7 +24,8 @@ export {
 	resolveArticleShareOptions,
 	resolveLastUpdatedNoticeOptions,
 } from "./articleConfig";
-export { commentConfig,
+export {
+	commentConfig,
 	type ResolvedCommentOptions,
 	resolveCommentOptions,
 } from "./commentConfig";
@@ -40,6 +41,7 @@ export {
 } from "./fontConfig";
 export { footerConfig } from "./footerConfig";
 export { friendsConfig } from "./friendsConfig";
+export { gamesConfig } from "./gamesConfig";
 export { i18nConfig } from "./i18nConfig";
 export {
 	imageBloomConfig,
@@ -59,6 +61,7 @@ export { permalinkConfig } from "./permalinkConfig";
 export { POST_CARD_MIN_WIDTH, postListConfig } from "./postListConfig";
 export { profileConfig } from "./profileConfig";
 export { projectsConfig } from "./projectsConfig";
+export { seriesConfig } from "./seriesConfig";
 export { sidebarConfig } from "./sidebarConfig";
 export {
 	getDefaultSpec,

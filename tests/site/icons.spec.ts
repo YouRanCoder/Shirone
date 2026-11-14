@@ -1,11 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * SSR 图标渲染防回归。
  * 背景：@iconify/svelte 的 Icon 依赖客户端运行时加载数据，SSR 无 hydration 时渲染空白。
- * 因此 IconButton 等在无 client 指令的 Astro 页面（TopAppBar / Profile / 文章页）中
- * 必须用 children 传 astro-icon（构建期数据、SSR 直出 svg），禁止改用 icon prop。
- * 若图标消失，改回 icon prop 就会让本文件失败。
+ * 因此所有图标都必须走 `atoms/display/Icon.svelte`——它在构建期把用到的图标
+ * 摇成一棵小树（`src/generated/local-icon-collections.ts`），SSR 直出 svg。
+ * 若绕过它改成在线 Iconify 组件、或让生成链路拿不到图标集，本文件就会失败。
  */
 test.describe("SSR 图标渲染", () => {
 	test("首页及设置交互不请求 Iconify API", async ({ page }) => {
@@ -43,6 +43,30 @@ test.describe("SSR 图标渲染", () => {
 	test("文章页复制链接按钮图标可见", async ({ page }) => {
 		await page.goto("/posts/markdown/");
 		await expect(page.locator("#copy-post-link svg")).toBeVisible();
+	});
+
+	test("Icon only emits data-icon when the caller provides it", async ({
+		page,
+	}) => {
+		await page.goto("/");
+		await page.evaluate(async () => {
+			const defaultHost = document.createElement("div");
+			defaultHost.id = "icon-default-probe";
+			const callerHost = document.createElement("div");
+			callerHost.id = "icon-caller-probe";
+			document.body.append(defaultHost, callerHost);
+			const { mountIconProbe } = await import(
+				"/tests/site/fixtures/component-probes.ts"
+			);
+			mountIconProbe(defaultHost);
+			mountIconProbe(callerHost, "caller-owned-value");
+		});
+
+		const defaultSvg = page.locator("#icon-default-probe svg");
+		const callerSvg = page.locator("#icon-caller-probe svg");
+		await expect(defaultSvg).toHaveCount(1);
+		await expect(defaultSvg).not.toHaveAttribute("data-icon");
+		await expect(callerSvg).toHaveAttribute("data-icon", "caller-owned-value");
 	});
 
 	test("BackToTop FAB 图标 SSR 渲染存在（初始隐藏态）", async ({ page }) => {

@@ -168,6 +168,9 @@ markdown:
 同一开关也作用于 RSS/Atom 输出（`src/utils/feed.ts` 用 `markdown-it` 的 `breaks` 选项），保证订阅端看到的换行与站内一致。
 
 ## 4. 缓存与刷新
+
+普通 Markdown 图片独占一行时，即使紧邻正文或连续出现，也可以通过 title 为每张图片生成图注；与文字在同一行混排的图片不生成块级图注。宽度令牌为 `w-N%`（1–100）。
+
 修改 remark/rehype 插件后，Astro dev 可能继续提供旧的 Markdown 编译结果。典型信号是：新 CSS 已出现，但插件新增的 class 或 DOM 结构不存在。
 
 Windows 下的最小刷新流程：

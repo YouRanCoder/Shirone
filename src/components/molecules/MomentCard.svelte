@@ -13,6 +13,7 @@ import { i18n } from "@i18n/translation";
 import type { MomentItem } from "@utils/content-utils";
 import { formatDateToYYYYMMDDHHmm } from "@utils/date-utils";
 import { reveal } from "@utils/motion";
+import type { Snippet } from "svelte";
 
 export type MomentAuthor = {
 	name: string;
@@ -29,11 +30,13 @@ let {
 	/** stagger 入场延迟 ms（由列表传入：第 i 项 i × step） */
 	delay = 0,
 	class: className = "",
+	children,
 }: {
 	moment: MomentItem;
 	author: MomentAuthor;
 	delay?: number;
 	class?: string;
+	children?: Snippet;
 } = $props();
 
 const publishedAt = $derived(new Date(moment.published));
@@ -58,6 +61,12 @@ const timeText = $derived(formatDateToYYYYMMDDHHmm(publishedAt));
 		</a>
 
 		<div class="moment-card__badges">
+			{#if moment.encrypted}
+				<span class="moment-card__badge moment-card__badge--encrypted">
+					<Icon icon="material-symbols:lock-rounded" aria-hidden="true" />
+					{i18n(I18nKey.postEncryptedBadge)}
+				</span>
+			{/if}
 			{#if moment.mood}
 				<span class="moment-card__badge" aria-hidden="true">
 					<Icon icon={moment.mood} />
@@ -74,33 +83,37 @@ const timeText = $derived(formatDateToYYYYMMDDHHmm(publishedAt));
 		<time class="moment-card__time" datetime={moment.published}>{timeText}</time>
 	</header>
 
-	{#if moment.html.trim()}
-		<div class="moment-card__content custom-md">
-			<!-- 正文为构建期渲染产物（站点 markdown 插件链），非用户输入 -->
-			{@html moment.html}
-		</div>
-	{/if}
+	{#if children}
+		{@render children()}
+	{:else}
+		{#if moment.html.trim()}
+			<div class="moment-card__content custom-md">
+				<!-- 正文为构建期渲染产物（站点 markdown 插件链），非用户输入 -->
+				{@html moment.html}
+			</div>
+		{/if}
 
-	{#if moment.images.length > 0}
-		<MomentGallery images={moment.images} />
-	{/if}
+		{#if moment.images.length > 0}
+			<MomentGallery images={moment.images} />
+		{/if}
 
-	{#if moment.location || moment.tags.length > 0}
-		<footer class="moment-card__footer">
-			{#if moment.location}
-				<span class="moment-card__location">
-					<Icon icon="material-symbols:location-on-outline-rounded" aria-hidden="true" />
-					{moment.location}
-				</span>
-			{/if}
-			{#if moment.tags.length > 0}
-				<div class="moment-card__tags">
-					{#each moment.tags as tag (tag)}
-						<span class="moment-card__tag">#{tag}</span>
-					{/each}
-				</div>
-			{/if}
-		</footer>
+		{#if moment.location || moment.tags.length > 0}
+			<footer class="moment-card__footer">
+				{#if moment.location}
+					<span class="moment-card__location">
+						<Icon icon="material-symbols:location-on-outline-rounded" aria-hidden="true" />
+						{moment.location}
+					</span>
+				{/if}
+				{#if moment.tags.length > 0}
+					<div class="moment-card__tags">
+						{#each moment.tags as tag (tag)}
+							<span class="moment-card__tag">#{tag}</span>
+						{/each}
+					</div>
+				{/if}
+			</footer>
+		{/if}
 	{/if}
 </article>
 
@@ -112,6 +125,8 @@ const timeText = $derived(formatDateToYYYYMMDDHHmm(publishedAt));
 	flex-direction: column
 	box-sizing: border-box
 	width: 100%
+	/* 网格项自动最小尺寸归零：卡片随轨道收缩，长内容由正文自行换行 */
+	min-width: 0
 	padding: var(--m3e-space-4) var(--m3e-space-5)
 	border-radius: var(--shape-corner-l)
 	background: var(--card-bg)
@@ -165,6 +180,10 @@ const timeText = $derived(formatDateToYYYYMMDDHHmm(publishedAt));
 			background: var(--primary-container)
 			color: var(--on-primary-container)
 
+		&--encrypted
+			background: var(--secondary-container)
+			color: var(--on-secondary-container)
+
 	&__time
 		margin-left: auto
 		flex-shrink: 0
@@ -176,7 +195,8 @@ const timeText = $derived(formatDateToYYYYMMDDHHmm(publishedAt));
 		color: var(--on-surface)
 		font: var(--m3e-type-body-medium)
 		line-height: 1.75
-		overflow-wrap: break-word
+		/* anywhere：换行同时参与 min-content 计算，窄宽度下长链接才不会溢出 */
+		overflow-wrap: anywhere
 		:global(p:first-child)
 			margin-top: 0
 		:global(p:last-child)

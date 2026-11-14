@@ -40,13 +40,21 @@ emitted chunk's location rather than the source file's.
 > **"Server" in a static site.** Shirone ships as SSG — every page is HTML on
 > disk and there is no server at runtime. But Astro still *renders* those pages
 > by executing components in Node at build time, and Vite calls that build the
-> SSR build (hence `src/integration/ssr-node-shims.ts`). So build-time Node
+> SSR build (hence `src/integration/vite/ssr-node-shims.ts`). So build-time Node
 > concerns — `__dirname`, `require`, filesystem reads — are real here even
 > though nothing runs on a server in production.
 
 `process.cwd()` *is* correct when the target genuinely belongs to the user —
 `public/images/albums/`, a directory named in their config, generated caches
 under `.shirones/`.
+
+**Convert file URLs before calling filesystem APIs.** Astro hooks can supply a
+`URL` such as the build output directory. Use `fileSystemPathFromUrl()` (which
+wraps Node's `fileURLToPath`) before passing it to Node or native tools such as
+Pagefind. Do not use `.pathname`: on Windows it can be `/D:/...`, which is not a
+valid native drive path. `tests/paths.test.mjs` exercises both Windows and
+POSIX conversion, and `tests/pagefind.test.mjs` verifies the paths sent to both
+Pagefind APIs on any host.
 
 ### Files that exist in both places
 
@@ -99,13 +107,136 @@ CSS file, so it resolves to the theme's own `src/` in both modes.
   dynamic `import()` outside the bundle) must be a **peer** dependency, because
   pnpm's strict layout hides the theme's own copy from the project root.
 
+New overridable components must have distinct path stems, even across source
+extensions. The override registry and explicit component map strip extensions
+so users can replace an Astro component with a Svelte component. Adding
+`Pagination.svelte` beside `Pagination.astro` would therefore merge their
+override keys and redirect the static pager to the interactive one. Use
+`ListPagination.svelte` for the interactive list pager; an explicit `.astro`
+or `.svelte` import alone does not prevent an override-key collision.
+
+**KaTeX is version-coupled.** The theme imports `katex/dist/katex.css` directly,
+while `rehype-katex@7` declares KaTeX `^0.16.0`.
+The workspace override is not published, so package-mode's `loadPackageModule`
+bundler resolves every renderer import from the theme's direct `katex`
+dependency. Keep the stylesheet on that same dependency and retain
+`tests/plugins/markdown/katex-package-mode.test.mjs`; a clean consumer install
+must not split renderer and CSS versions.
+
+### Every import used by the copied CLI must be in the package archive
+
+The package publisher copies the CLI rather than bundling it. A relative import
+that works in the source tree is not automatically present in the published
+archive, especially when its source directory is excluded from the package
+payload. A missing sibling is discovered only after a successful install, when
+`shirones init` fails with `ERR_MODULE_NOT_FOUND`.
+
+`src/integration/version-range.mjs` is shared with `verify-peers.ts` so peer
+validation and `init --update` use the same range logic. The integration bundle
+can inline that import; the standalone CLI still needs the sibling at its
+published relative path. External runtime imports need the same explicit
+packaging contract: `jsonc-parser` is loaded lazily with `import()` only when
+`init` edits an existing JSONC tsconfig, and is shipped through
+`extraDependencies` in `src/integration/package.manifest.json`. The lazy import
+keeps `help` and `info` usable before project setup; `scripts/check-package-manifest.mjs`
+recognizes dynamic imports and must fail if that shipped dependency is removed.
+
+**Release validation must use the actual archive.** The publisher should derive
+or explicitly maintain the CLI sibling list, inspect the `npm pack` tarball,
+install that tarball in a clean temporary project, and invoke the CLI paths that
+use the range engine and JSONC parser. The pinned pipeline currently runs
+`init`, `init --force` and `info` against a project that has no tsconfig yet, so
+`init --update` against an existing JSONC tsconfig is still a manual release
+step rather than something the pipeline proves. A source-only manifest check or
+a successful import from the repository does not prove that the published
+package contains the runtime files and dependencies.
+
+### What the range engine does and does not decide
+
+`src/integration/version-range.mjs` is a deliberate SemVer **subset**, shared by
+`verify-peers.ts` and `cli.mjs` so the two cannot drift. It reads full and
+partial versions (for example `^7`, `^8`, `~7.3`, and `7.3.x`), caret and tilde
+ranges including both 0.x caret boundaries, and comparator sets as
+conjunctions. Full SemVer prerelease identifiers are compared in order, and
+build metadata does not affect precedence.
+
+The following limits are deliberate:
+
+- **Prerelease admission follows npm's tuple rule.** A prerelease version is
+  rejected unless the range explicitly names a prerelease comparator on that
+  same `major.minor.patch` tuple. Thus `7.4.0-beta.1` does not satisfy `^7.3.5`
+  or `*`, while `>=7.3.6-beta.1 <8.0.0` can admit matching prereleases of
+  `7.3.6` that fall inside both bounds.
+- **Unsupported range syntax fails open.** `||`, `workspace:`, `file:`,
+  `link:`, `npm:`, dist-tags, and hyphen ranges are not interpreted; they do
+  not cause a peer violation or a CLI rewrite. This avoids rejecting a build
+  for syntax the lightweight engine cannot safely assess.
+- **An installed version is ground truth for the current project.** When
+  `node_modules/<pkg>` exists, that concrete version decides even if the
+  declared range is broader. For example, `astro: ^7.0.0` with `astro@7.4.2`
+  installed passes if the theme requires `^7.3.5`. This is useful with a valid
+  lockfile, but it does **not** prove every version allowed by `^7.0.0` is
+  supported; a fresh install could choose an older release. The check and
+  `init --update` only repair ranges that provably have no compatible version;
+  they do not narrow a broad range. Keep the declared floor and lockfile
+  appropriate for the project that will be installed.
+
+This is not a complete SemVer implementation, and the peer-check message does
+not claim it is. Do not describe the check as full SemVer validation.
+
+## The peer dependency list
+
+The shortest possible one, and each entry has a verified reason in
+`src/integration/verify-peers.ts`. Three distinct mechanisms force a package
+onto the user's project:
+
+| Mechanism | Packages | Why bundling fails |
+| --- | --- | --- |
+| Imported by the user's own config | `astro` | the project *is* an Astro project |
+| Imported by the user's config **and** declared a peer by it | `svelte`, `@astrojs/svelte` | `astro.config.mjs` imports `@astrojs/svelte` to register the integration, and that package names `svelte` a peer dependency — so both resolve from the project root, and a nested copy stays invisible to pnpm's peer resolution |
+| Imported by Astro itself, dynamically | `sharp` | Astro's image service resolves it from its own location; the `@img/*` bindings must also be version-matched |
+
+`@astrojs/svelte` does place a `optimizeDeps.exclude: ["svelte"]` entry, but
+that is not the reason for the peer: the entry only *names* `svelte`, and the
+name resolves wherever the resolved layout puts it. The root dependency is
+required by the config-file import and the peer relationship, not by that list.
+
+Plus `@astrojs/check` and `typescript`, which only `astro check` needs — they
+are declared so the command works right after `init`, not because a build
+requires them.
+
+The four `@iconify-json/*` sets used to belong in this table. They were
+removed when `astro-icon` was dropped: it located icon sets by reading the
+**user's** `package.json`, so no amount of bundling could make them
+transitive. Nothing in the theme reads a manifest for icons any more —
+`vite/icon/collections.ts` resolves them from inside the installed package and
+emits a tree-shaken collection — so they now ship as ordinary dependencies.
+
+That is the case worth internalising: *resolving* and *discovering* are
+different questions, and only the consumer's source tells you which one it
+does. A package that resolves fine from inside the theme is still unusable if
+the consumer looks it up in a manifest you do not control. The removal left
+one extra step behind — the theme now owns icon rendering, including the
+`local` collection a project's own `src/icons/*.svg` feeds, and the
+`@iconify/svelte` alias is mirrored in `tsconfig.json` so TypeScript resolves
+the theme's `Icon.svelte` rather than the real package's deprecated types.
+
+`src/integration/verify-peers.ts` is the single source of truth for that list,
+and `astro:config:setup` enforces it before anything expensive runs. Adding a
+package there means adding it to `PEER_REQUIREMENTS`, choosing its tier, and
+writing down the mechanism — the reason string is user-visible, so it is the
+contract's documentation as much as the code is. Its tests
+(`tests/verify-peers.test.mjs`) cover absent, stale, unparseable and
+tooling-only cases.
+
 ## Adding things
 
 | You add | What to do |
 | --- | --- |
 | A route in `src/pages/` | Nothing. `routes.ts` discovers it and `injectRoute`s it. Non-HTML endpoints (`*.txt.ts`, `*.xml.ts`) are handled. |
 | A config module in `src/config/` | Nothing, if it follows the existing shape — the template picks it up and its relative imports are rewritten. Keep it exporting through the `src/config/index.ts` barrel. |
-| An integration option (swup, astro-icon, expressive-code, svelte, mdx, or the shared `vite.build` keys) | Put it in `src/config/integrationsConfig.ts`, not in either entry point. Both `astro.config.mjs` and `src/integration/index.ts` read it, so one edit covers source mode and package mode. Do **not** export it through the barrel and do **not** route it through `withUserConfig` — package mode bundles this file at build time, so it has no user-overlay layer. Wiring (aliases, `preprocess`, `optimizeDeps`, `vite.plugins`, expressive-code `themes`/`plugins`) stays at the use sites and is explained there. |
+| An integration option (swup, expressive-code, svelte, mdx, or the shared `vite.build` keys) | Put it in `src/config/integrationsConfig.ts`, not in the wiring. The integration — the single Astro config entry point for source mode and package mode alike — reads it, so one edit covers both. Do **not** export it through the barrel and do **not** route it through `withUserConfig` — package mode bundles this file at build time, so it has no user-overlay layer. Wiring (aliases, `preprocess`, `optimizeDeps`, `vite.plugins`, expressive-code `themes`/`plugins`) stays in `src/integration/index.ts`, where per-mode branches are commented. |
+| A content collection | Three things, all in this repo. Export its schema from `src/integration/collections.ts` (name it `<singular>Schema`), declare it in `src/content.config.ts` with `glob({ base: "./src/content/<key>", … })`, and add one entry to `src/integration/collections.manifest.json`. `tests/collections-manifest.test.mjs` fails if those three disagree. The pipeline reads that manifest to generate a package-mode user's `content.config.ts`, and copies `src/content/` recursively, so **shirones needs no change**. |
 | A data module in `src/data/` | Nothing. It is scaffolded to `shirones/config/data/`. Remember imports of `../config/x` become `../x` there. |
 | A component or layout | Nothing for it to work; it becomes overridable automatically. |
 | A new top-level `src/` directory | Nothing, except for `content/` and `integration/`. The shirones pipeline copies every top-level `src/` directory not in `PACKAGE_SRC_EXCLUDES` (`scripts/config.mjs`, currently `content` and `integration`). `content/` is user-owned and ships through the template; `integration/` is the theme's own wiring that shirones rebuilds for npm mode. (This used to be a whitelist, `PACKAGE_SRC_DIRS` — `src/user/` was added upstream and missed it, breaking the packaged build. That failure mode is gone.) |

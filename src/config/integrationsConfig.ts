@@ -6,37 +6,31 @@
 
 import type mdx from "@astrojs/mdx";
 import type swup from "@swup/astro";
-import type expressiveCode from "astro-expressive-code";
-import type icon from "astro-icon";
 import type { AstroUserConfig } from "astro";
+import type expressiveCode from "astro-expressive-code";
 
 /**
- * 两个 Astro 配置入口共享的集成选项。
+ * 所有模式共享的集成选项。
  *
- * 主题有两份 Astro 配置，且互不引用：
+ * 主题只有一份 Astro 配置入口：`src/integration/index.ts` 在
+ * `astro:config:setup` 阶段的 `updateConfig()`。源码模式（本仓 checkout）与
+ * 包模式（npm 安装）都通过 `integrations: [shirones()]` 跑它——本仓的
+ * `astro.config.mjs` 只剩这一行接线。源码模式由 in-repo 检测
+ * （`paths.isThemeRepo`）把 config/data/content 指回 `src/` 自身，`src/` 下
+ * 原生的 pages/组件照常被 Astro 拾取。
  *
- * - **源码模式** —— 本仓的 `astro.config.mjs`，`defineConfig()` 直接读它；
- * - **包模式** —— `src/integration/index.ts` 的 `updateConfig()`，在
- *   `astro:config:setup` 阶段跑。用户项目的 `astro.config.mjs` 里只有
- *   `integrations: [shirones()]`，本仓的 `astro.config.mjs` 根本不参与。
+ * **只放「选项值」和纯函数，不放接线（wiring）。** 接线集中在
+ * `src/integration/index.ts`，按模式分支，不要往这里搬：
  *
- * 所以包模式读不到本仓的 `astro.config.mjs`，源码模式也不会跑 integration。
- * 任何一边改了、另一边没跟上，都不会有任何检查报错——用户侧静默失效。本文件
- * 把两份声明里**本就该一致**的部分收敛成单一来源。
- *
- * **只放「选项值」和纯函数，不放接线（wiring）。** 下面这些东西天生分模式，
- * 不要往这里搬：
- *
- * - `vite.resolve.alias` —— 两侧根目录和依赖树不同，包模式还要把 `@/`、
- *   `@components/` 等映射到 `paths.packageSrc`；
- * - `svelte().preprocess` —— 源码模式靠本仓的 `svelte.config.js`，用户项目
- *   没有这个文件（pipeline 也不生成），必须由 integration 显式传；
- * - `vite.optimizeDeps.include` —— 包模式要先过 `prebundleCandidates()`，
- *   因为 Vite 从**项目**根解析这个列表，看不见主题自己的嵌套 node_modules；
- * - `vite.plugins` —— 包模式要 overlay / fallback-resolver / SSR shims；
- * - `expressiveCode()` 的 `themes` 和 `plugins` —— 包模式必须走
+ * - `vite.resolve.alias` —— 两侧根目录和依赖树不同；
+ * - `svelte().preprocess` —— 由 integration 显式传 `vitePreprocess`（本仓的
+ *   `svelte.config.js` 只剩编辑器工具用途）；
+ * - `vite.optimizeDeps.include` —— 要过 `prebundleCandidates()`：Vite 从
+ *   **项目**根解析这个列表，包模式看不见主题自己的嵌套 node_modules；
+ * - `vite.plugins` —— overlay（仅包模式）/ fallback-resolver / SSR shims；
+ * - `expressiveCode()` 的 `themes` 和 `plugins` —— 必须走
  *   `loadConfigModule()` / `loadPackageModule()`，用户的覆盖才生效；
- * - `fonts`、`markdown.processor`、`site`、`base` —— 取值方式两侧不同。
+ * - `fonts`、`markdown.processor`、`site`、`base` —— 由 integration 统一装载。
  *
  * 本文件不 import `../types/`、`../utils/` 等目录：模板拷贝时
  * `CONFIG_REWRITES` 不覆盖这些路径，一旦引用会让 `prepare-templates.mjs` 的
@@ -63,11 +57,9 @@ export const TRAILING_SLASH = "always";
  * 结果 URL 生成端吐 `/_image?…`，路由 pattern 却要求 `/_image/`，`astro dev`
  * 下每个图片请求都 404（build 和 preview 不受影响）。
  *
- * 这里直接把斜杠补上，等价于 transform 本该产出的结果。
- *
- * 源码模式不受影响：它的 `astro.config.mjs` 在 `defineConfig()` 里就设了
- * `trailingSlash: "always"`，transform 看到的就是最终值，会自己补斜杠；而且
- * 源码模式压根不跑 integration。
+ * 这里直接把斜杠补上，等价于 transform 本该产出的结果。integration 的
+ * `updateConfig()` 把 `trailingSlash` 与 `image.endpoint.route` 成对设置
+ * （见 index.ts 中的注释），**所有模式**——源码模式在内——都走这条路径。
  *
  * ⚠️ 若 `TRAILING_SLASH` 改了，这里要跟着改：
  *    `"always"` → `"/_image/"`  |  `"never"` / `"ignore"` → `"/_image"`
@@ -122,26 +114,8 @@ export const swupOptions: NonNullable<Parameters<typeof swup>[0]> = {
  */
 export const swupForwardOptions = {
 	animateHistoryBrowsing: false,
-	skipPopStateHandling: (event: { state?: { url?: string } }) =>
+	skipPopStateHandling: (event: { state?: { url?: string } }): boolean =>
 		Boolean(event.state?.url?.includes("#")),
-};
-
-/**
- * `astro-icon` 要打包的图标集。
- *
- * 五个集合一个都不能少：`src/` 里共 340 处图标引用，其中 `material-symbols`
- * 占 308 处、`simple-icons` 占 21 处。源码模式此前漏了这两个，只靠 astro-icon
- * 在扁平 `node_modules` 下的自动发现兜住；包模式在 pnpm 严格布局下没有这个
- * 退路，必须显式声明。
- */
-export const iconInclude: NonNullable<
-	NonNullable<Parameters<typeof icon>[0]>["include"]
-> = {
-	"material-symbols": ["*"],
-	"simple-icons": ["*"],
-	"fa6-brands": ["*"],
-	"fa6-regular": ["*"],
-	"fa6-solid": ["*"],
 };
 
 /**
@@ -208,7 +182,7 @@ export function svelteCompilerOptions(isDev: boolean) {
 			`svelte-${hash(css)}`,
 		// Keep repeated Svelte compiler diagnostics out of the dev terminal;
 		// check/build still surface the full warning set in CI.
-		warningFilter: () => !isDev,
+		warningFilter: (): boolean => !isDev,
 	};
 }
 
@@ -245,6 +219,16 @@ export const viteBuildShared: NonNullable<
 			) {
 				return;
 			}
+			// Astro's MDX bridge injects this directive before Rolldown sees the
+			// module; the directive is consumed by Astro and is not meaningful in
+			// the final browser bundle. Remove this filter once the bridge stops
+			// forwarding `astro:head-inject` to the bundler.
+			if (
+				warning.code === "MODULE_LEVEL_DIRECTIVE" &&
+				warning.message.includes('"use astro:head-inject"')
+			) {
+				return;
+			}
 			defaultHandler(warning);
 		},
 	},
@@ -257,11 +241,16 @@ export const viteBuildShared: NonNullable<
  * 根解析这些 id，看不见主题自己的嵌套依赖，列一个解析不了的 id 会让每次冷启动
  * 都刷一条警告。
  */
-export const prebundleSpecifiers = [
+export const prebundleSpecifiers: string[] = [
 	"mermaid",
 	"@panzoom/panzoom",
 	"overlayscrollbars",
 	"@fancyapps/ui",
+	// share-poster.ts reaches for this one at runtime, on the first share
+	// dialog rather than during SSR. Without it here the dev server serves a
+	// stale pre-bundle id and the dynamic import rejects, so poster
+	// generation fails only in dev.
+	"qrcode",
 ];
 
 /**

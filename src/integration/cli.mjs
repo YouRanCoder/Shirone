@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Shirone CLI.
  *
@@ -7,15 +8,27 @@
  *   npx shirones init --force    replace template files after backing them up
  *   npx shirones info            detailed status and drift report
  *
- * The command is intentionally dependency-free so it can run via `npx` in a
- * bare project before anything else is installed.
+ * The command does not rely on dependencies in the user's project. Its
+ * `jsonc-parser` dependency ships with this package and loads only when init
+ * validates or edits an existing JSONC tsconfig.
  */
 
-import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	cp,
+	mkdir,
+	readdir,
+	readFile,
+	rename,
+	writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+// Shared with `src/integration/verify-peers.ts`. See `version-range.mjs`
+// for why it is a `.mjs` and not a `.ts`.
+import { rangesIntersect } from "./version-range.mjs";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 const TEMPLATE_DIR = join(PACKAGE_ROOT, "template");
@@ -37,7 +50,10 @@ const colours = {
 const log = {
 	step: (msg) => console.log(`${colours.cyan}›${colours.reset} ${msg}`),
 	ok: (msg) => console.log(`${colours.green}✓${colours.reset} ${msg}`),
-	skip: (msg) => console.log(`${colours.dim}·${colours.reset} ${colours.dim}${msg}${colours.reset}`),
+	skip: (msg) =>
+		console.log(
+			`${colours.dim}·${colours.reset} ${colours.dim}${msg}${colours.reset}`,
+		),
 	warn: (msg) => console.log(`${colours.yellow}!${colours.reset} ${msg}`),
 	err: (msg) => console.error(`${colours.red}✗${colours.reset} ${msg}`),
 };
@@ -83,7 +99,10 @@ ${colours.dim}  shirones uses ${pmPin} — the version shipped with this release
 async function copyEntry(from, to, { force, quiet = false }) {
 	if (!existsSync(from)) return { copied: false, reason: "missing" };
 	if (existsSync(to) && !force) {
-		if (!quiet) log.skip(`${relative(CWD, to) || "."} already exists (use --force to overwrite)`);
+		if (!quiet)
+			log.skip(
+				`${relative(CWD, to) || "."} already exists (use --force to overwrite)`,
+			);
 		return { copied: false, reason: "exists" };
 	}
 	let saved;
@@ -94,7 +113,9 @@ async function copyEntry(from, to, { force, quiet = false }) {
 	await cp(from, to, { recursive: true, force: true });
 	if (!quiet) {
 		const label = relative(CWD, to) || ".";
-		log.ok(saved ? `${label} replaced (--force), kept a copy at ${saved}` : label);
+		log.ok(
+			saved ? `${label} replaced (--force), kept a copy at ${saved}` : label,
+		);
 	}
 	return { copied: true, saved };
 }
@@ -127,13 +148,12 @@ async function mergeDirectory(from, to, { force }) {
 				await walk(nextSource, nextTarget);
 				continue;
 			}
-			let saved;
 			if (existsSync(nextTarget) && !force) {
 				kept += 1;
 				continue;
 			}
 			if (existsSync(nextTarget) && force) {
-				saved = await backup(relative(CWD, nextTarget));
+				await backup(relative(CWD, nextTarget));
 			}
 			await cp(nextSource, nextTarget, { force: true });
 			added += 1;
@@ -162,12 +182,16 @@ async function countFiles(dir) {
 
 /**
  * The user's project must depend on `astro` and on the theme's peer
- * dependencies directly. Some tooling resolves from the project root rather
- * than from the importing file, and pnpm's strict layout hides the theme's own
- * dependencies there: `@astrojs/svelte` registers `svelte/*` subpaths in
- * `optimizeDeps.include`, and astro-icon loads `@iconify-json/*` sets through
- * `require.resolve` in Node. Installing them at the root is the only thing that
- * satisfies both, so `init` writes them all into package.json and installs.
+ * dependencies directly. Two mechanisms force that, and pnpm's strict layout
+ * hides the theme's own dependencies at the project root either way:
+ * `astro.config.mjs` imports `@astrojs/svelte` to register the integration,
+ * and that package names `svelte` a peer dependency. Installing them at the
+ * root is the only thing that satisfies both, so `init` writes them into
+ * package.json and installs.
+ *
+ * This is the short list, and each entry has a reason recorded in
+ * `src/integration/verify-peers.ts`, which also reports a missing one with
+ * the exact install command instead of pnpm's generic peer warning.
  */
 
 /** Dependencies whose install scripts must be allowed to run. */
@@ -220,7 +244,11 @@ async function ensurePnpmWorkspace() {
 
 	const allowIndex = lines.findIndex((line) => /^allowBuilds:\s*$/.test(line));
 	if (allowIndex === -1) {
-		lines = [...lines.join("\n").trimEnd().split("\n"), "", ...allowBlock.split("\n")];
+		lines = [
+			...lines.join("\n").trimEnd().split("\n"),
+			"",
+			...allowBlock.split("\n"),
+		];
 	} else {
 		// Rewrite the whole indented block so placeholders become `true`.
 		let end = allowIndex + 1;
@@ -239,7 +267,10 @@ async function ensurePnpmWorkspace() {
 	}
 
 	if (!lines.some((line) => /^onlyBuiltDependencies:\s*$/.test(line))) {
-		lines = [...lines.join("\n").trimEnd().split("\n"), ...onlyBlock.split("\n")];
+		lines = [
+			...lines.join("\n").trimEnd().split("\n"),
+			...onlyBlock.split("\n"),
+		];
 	}
 
 	const next = `${lines.join("\n").trimEnd()}\n`;
@@ -251,7 +282,10 @@ async function ensurePnpmWorkspace() {
 	log.ok("pnpm-workspace.yaml");
 }
 
-async function ensurePackageJson(packageName) {
+async function ensurePackageJson(
+	packageName,
+	{ syncPackageManager = false } = {},
+) {
 	const pkgPath = join(CWD, "package.json");
 	const peers = await themePeers();
 	const packageManager = await readPackageManager();
@@ -263,7 +297,9 @@ async function ensurePackageJson(packageName) {
 		const version = await readPackageVersion();
 		const dependencies = {
 			astro: peers.astro ?? "^7.0.0",
-			...Object.fromEntries(Object.entries(peers).filter(([name]) => name !== "astro")),
+			...Object.fromEntries(
+				Object.entries(peers).filter(([name]) => name !== "astro"),
+			),
 			[packageName]: version ? `^${version}` : "latest",
 		};
 		const pkg = {
@@ -272,7 +308,7 @@ async function ensurePackageJson(packageName) {
 			private: true,
 			type: "module",
 			// Pin the same package manager the theme is developed with (e.g.
-			// pnpm@9.x) so `.npmrc`'s `manage-package-manager-versions` and
+			// pnpm@11.28.2) so `.npmrc`'s `manage-package-manager-versions` and
 			// CI hosts (Vercel, corepack) resolve the intended pnpm.
 			...(packageManager ? { packageManager } : {}),
 			scripts: {
@@ -300,19 +336,40 @@ async function ensurePackageJson(packageName) {
 	const version = await readPackageVersion();
 	const wantedDeps = {
 		astro: peers.astro ?? "^7.0.0",
-		...Object.fromEntries(Object.entries(peers).filter(([name]) => name !== "astro")),
+		...Object.fromEntries(
+			Object.entries(peers).filter(([name]) => name !== "astro"),
+		),
 		[packageName]: version ? `^${version}` : "latest",
 	};
+
+	// The theme used to declare nothing of its own and asked the project to
+	// install the icon sets, so an older project still carries some of them.
+	// They are reported, never removed: "no longer a peer of the theme" says
+	// nothing about whether the user's own components and scripts import them,
+	// and deleting one they use breaks their build with a resolution error
+	// that names neither the cause nor this command.
+	const obsolete = [];
+	for (const name of ICONIFY_SET_PACKAGES) {
+		if (Object.hasOwn(peers, name)) continue;
+		if (pkg.dependencies?.[name]) obsolete.push(`${name} (dependencies)`);
+		else if (pkg.devDependencies?.[name])
+			obsolete.push(`${name} (devDependencies)`);
+	}
 
 	const addedDeps = [];
 	const upgradedDeps = [];
 	for (const [dep, range] of Object.entries(wantedDeps)) {
 		const declared = pkg.dependencies[dep] ?? pkg.devDependencies[dep];
 		if (declared) {
-			// A declared dependency that can no longer satisfy the theme's
-			// requirement would break the build (e.g. a starter pinned astro@5
-			// while the theme needs astro@^7). Bump it and say so.
-			if (rangeLower(rangeFloor(declared), rangeFloor(range))) {
+			// A declared dependency that no longer shares a version with the
+			// theme's requirement has to be bumped (e.g. a starter pinned
+			// astro@5 while the theme needs astro@^7). Sharing the engine with
+			// `verify-peers.ts` is what makes "it this is the command that fixes
+			// what the integration reported" true rather than merely suggested:
+			// `^0.36.0` for `^0.35.5` and `<7.3.5` for `^7.3.5` are both
+			// disjoint and both get rewritten here, while `^7.3.0` for
+			// `^7.3.5` keeps a valid intersection and is left alone.
+			if (!rangesIntersect(declared, range)) {
 				pkg.dependencies[dep] = range;
 				delete pkg.devDependencies[dep];
 				upgradedDeps.push({ dep, from: declared, to: range });
@@ -337,14 +394,16 @@ async function ensurePackageJson(packageName) {
 			changed = true;
 		}
 	}
-	if (pkg.type !== "module") {
-		pkg.type = "module";
-		changed = true;
-	}
-
-	// Same package-manager pin as the freshly-created case, but never clobber
-	// a version the user already chose themselves.
-	if (packageManager && !pkg.packageManager) {
+	// A fresh project gets the package pin above. On an explicit `--update`,
+	// advance an older Shirone-generated pin to the current package pin too;
+	// otherwise the project would keep running the previous release's pnpm even
+	// after the user updated the theme. Do not touch a user's package manager
+	// during an ordinary init.
+	if (
+		packageManager &&
+		(!pkg.packageManager ||
+			(syncPackageManager && pkg.packageManager !== packageManager))
+	) {
 		pkg.packageManager = packageManager;
 		changed = true;
 	}
@@ -362,10 +421,35 @@ async function ensurePackageJson(packageName) {
 		log.ok("package.json");
 	}
 	for (const { dep, from, to } of upgradedDeps) {
-		log.warn(`bumped ${dep} ${from} -> ${to} — the declared version no longer satisfies the theme`);
+		log.warn(
+			`bumped ${dep} ${from} -> ${to} — the declared version no longer satisfies the theme`,
+		);
+	}
+	if (obsolete.length > 0) {
+		log.warn(
+			"still declared, but the theme no longer resolves icon sets from the project:\n" +
+				`${obsolete.map((entry) => `  - ${entry}`).join("\n")}\n` +
+				"  Remove them by hand if nothing of yours imports them.",
+		);
 	}
 	return [...addedDeps, ...upgradedDeps.map((d) => d.dep)];
 }
+
+/**
+ * The icon-set packages the theme used to require of the project.
+ *
+ * Reported, never removed: see the `obsolete` block in `ensurePackageJson`.
+ * Kept as an explicit list rather than a `@iconify-json/*` glob so the message
+ * names them and so a package the user adds under that scope for their own
+ * purposes is never touched.
+ */
+const ICONIFY_SET_PACKAGES = [
+	"@iconify-json/fa7-brands",
+	"@iconify-json/fa7-solid",
+	"@iconify-json/material-symbols",
+	"@iconify-json/simple-icons",
+	"@iconify-json/twemoji",
+];
 
 /** Read the theme's declared peer dependencies. */
 async function themePeers() {
@@ -375,27 +459,6 @@ async function themePeers() {
 	} catch {
 		return {};
 	}
-}
-
-/**
- * Lowest version a range admits, as [major, minor, patch]. Handles the common
- * caret/tilde/plain forms ("^7.0.0", "~0.34.5", "7", ">=6"); anything
- * unparseable ("latest", "*", …) is `null` and treated as unknown.
- */
-function rangeFloor(range) {
-	if (typeof range !== "string") return null;
-	const m = range.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
-	if (!m) return null;
-	return [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)];
-}
-
-/** Whether floor `a` is strictly below floor `b` (null floors are "unknown"). */
-function rangeLower(a, b) {
-	if (!a || !b) return false;
-	for (let i = 0; i < 3; i++) {
-		if (a[i] !== b[i]) return a[i] < b[i];
-	}
-	return false;
 }
 
 /**
@@ -437,8 +500,12 @@ async function installRootFiles({ force }) {
 	if (added === 0 && skipped > 0) {
 		log.skip(`root files already present (${skipped} kept)`);
 	} else if (added > 0) {
-		const backupNote = backedUp ? `, ${backedUp} previous copies backed up` : "";
-		log.ok(`root files (${added} added${skipped ? `, ${skipped} kept` : ""}${backupNote})`);
+		const backupNote = backedUp
+			? `, ${backedUp} previous copies backed up`
+			: "";
+		log.ok(
+			`root files (${added} added${skipped ? `, ${skipped} kept` : ""}${backupNote})`,
+		);
 	}
 }
 
@@ -465,6 +532,77 @@ function detectPackageManager() {
 	return "pnpm";
 }
 
+/** Detect the installed pnpm outside the user's project metadata. */
+function detectCurrentPnpmVersion() {
+	const probeDir = mkdtempSync(join(tmpdir(), "shirones-pnpm-"));
+	try {
+		const result = spawnSync("pnpm", ["--version"], {
+			cwd: probeDir,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			shell: process.platform === "win32",
+		});
+		return result.status === 0 ? result.stdout.trim() : null;
+	} finally {
+		rmSync(probeDir, { recursive: true, force: true });
+	}
+}
+
+function parsePnpmPin(packageManager) {
+	const match = packageManager?.match(/^pnpm@(.+)$/);
+	return match ? { spec: match[1], display: packageManager } : null;
+}
+
+/**
+ * Run the package manager selected by the published package.
+ *
+ * A matching local pnpm is used directly. A mismatch is deliberately not
+ * handed back to the old pnpm's self-updater: pnpm 10/11 request the obsolete
+ * `@pnpm/linux-x64` package name when the pin is pnpm 12. Corepack is the
+ * normal bootstrap path; when Corepack is not installed, npx runs the pinned
+ * pnpm package directly.
+ */
+function runPinnedPnpm(args, packageManager) {
+	const pin = parsePnpmPin(packageManager);
+	const current = detectCurrentPnpmVersion();
+	if (!pin || current === pin.spec) {
+		return spawnSync("pnpm", args, {
+			cwd: CWD,
+			stdio: "inherit",
+			shell: process.platform === "win32",
+		});
+	}
+
+	const corepack = process.platform === "win32" ? "corepack.cmd" : "corepack";
+	const corepackAvailable =
+		spawnSync(corepack, ["--version"], {
+			stdio: "ignore",
+			shell: process.platform === "win32",
+		}).status === 0;
+	if (corepackAvailable) {
+		log.step(
+			`pnpm ${current ?? "unknown"} differs from ${pin.display}; using Corepack`,
+		);
+		const result = spawnSync(corepack, ["pnpm", ...args], {
+			cwd: CWD,
+			stdio: "inherit",
+			shell: process.platform === "win32",
+		});
+		if (result.status === 0) return result;
+		log.warn(
+			`Corepack was found but failed to run ${pin.display}; trying npx fallback`,
+		);
+	}
+
+	const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+	log.step(`Corepack unavailable; using npx ${pin.display}`);
+	return spawnSync(npx, ["--yes", `pnpm@${pin.spec}`, ...args], {
+		cwd: CWD,
+		stdio: "inherit",
+		shell: process.platform === "win32",
+	});
+}
+
 /**
  * Install the project's dependencies so `init` works from a completely empty
  * directory: writing the missing peer dependencies into package.json is only
@@ -474,17 +612,25 @@ function detectPackageManager() {
  */
 async function installDependencies() {
 	const pm = detectPackageManager();
+	const packageManager = await readPackageManager();
 	// pnpm treats a CI environment as `--frozen-lockfile`, and this install
 	// exists precisely because package.json just changed — so opt out.
-	const args = pm === "pnpm" ? ["install", "--no-frozen-lockfile"] : ["install"];
-	log.step(`installing dependencies with ${pm} ${args.slice(1).join(" ")}`);
-	const result = spawnSync(pm, args, {
-		cwd: CWD,
-		stdio: "inherit",
-		shell: process.platform === "win32",
-	});
+	const args =
+		pm === "pnpm" ? ["install", "--no-frozen-lockfile"] : ["install"];
+	const label = pm === "pnpm" && packageManager ? packageManager : pm;
+	log.step(`installing dependencies with ${label} ${args.slice(1).join(" ")}`);
+	const result =
+		pm === "pnpm"
+			? runPinnedPnpm(args, packageManager)
+			: spawnSync(pm, args, {
+					cwd: CWD,
+					stdio: "inherit",
+					shell: process.platform === "win32",
+				});
 	if (result.status !== 0) {
-		log.err(`${pm} install failed — run it manually and check the output above`);
+		log.err(
+			`${label} install failed — run it manually and check the output above`,
+		);
 		process.exitCode = 1;
 		return false;
 	}
@@ -495,21 +641,119 @@ async function installDependencies() {
  * Write a tsconfig that teaches the editor about the theme's path aliases, so
  * `@/types/config` resolves while editing files under `shirones/config/`.
  */
+async function readJsoncTsConfig(tsconfigPath) {
+	const original = await readFile(tsconfigPath, "utf8");
+	const hasBom = original.startsWith("\uFEFF");
+	const source = hasBom ? original.slice(1) : original;
+	let jsonc;
+	try {
+		// This is used only when init edits an existing tsconfig. Help/info and
+		// creation of a missing tsconfig do not load the parser at CLI startup.
+		jsonc = await import("jsonc-parser");
+	} catch (error) {
+		if (
+			error?.code === "ERR_MODULE_NOT_FOUND" &&
+			error.message.includes("jsonc-parser")
+		) {
+			throw new Error(
+				"The installed shirones package is missing its jsonc-parser runtime dependency; reinstall the package and retry.",
+				{ cause: error },
+			);
+		}
+		throw error;
+	}
+
+	const parseErrors = [];
+	const value = jsonc.parse(source, parseErrors, { allowTrailingComma: true });
+	if (parseErrors.length > 0) {
+		const { error, offset } = parseErrors[0];
+		throw new Error(
+			`Could not parse tsconfig.json (JSONC error ${error} at offset ${offset}); ` +
+				"fix the file and run `shirones init` again.",
+		);
+	}
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		throw new Error("tsconfig.json must contain a JSON object.");
+	}
+
+	const compilerOptions = value.compilerOptions;
+	if (
+		compilerOptions !== undefined &&
+		(compilerOptions === null ||
+			typeof compilerOptions !== "object" ||
+			Array.isArray(compilerOptions))
+	) {
+		throw new Error("tsconfig.json compilerOptions must be an object.");
+	}
+	const currentPaths = compilerOptions?.paths;
+	if (
+		currentPaths !== undefined &&
+		(currentPaths === null ||
+			typeof currentPaths !== "object" ||
+			Array.isArray(currentPaths))
+	) {
+		throw new Error("tsconfig.json compilerOptions.paths must be an object.");
+	}
+	const baseUrl = compilerOptions?.baseUrl;
+	if (baseUrl != null && typeof baseUrl !== "string") {
+		throw new Error("tsconfig.json compilerOptions.baseUrl must be a string.");
+	}
+
+	return {
+		original,
+		source,
+		hasBom,
+		value,
+		compilerOptions,
+		currentPaths,
+		jsonc,
+	};
+}
+
+async function validateExistingTsConfig() {
+	const tsconfigPath = join(CWD, "tsconfig.json");
+	if (existsSync(tsconfigPath)) await readJsoncTsConfig(tsconfigPath);
+}
+
+function inferJsoncFormattingOptions(source) {
+	const indentation =
+		/(?:^|\r?\n)([ \t]+)"[^"\r\n]+"\s*:/.exec(source)?.[1] ?? "";
+	const insertSpaces = !indentation.includes("\t");
+	return {
+		insertSpaces,
+		tabSize: insertSpaces ? Math.max(indentation.length, 2) : 2,
+		eol: source.includes("\r\n") ? "\r\n" : "\n",
+	};
+}
+
+function getThemeTsConfigPaths(packageName, baseUrl) {
+	const baseDirectory = resolve(CWD, baseUrl);
+	const themeSource = resolve(CWD, "node_modules", packageName, "src");
+	const relativeSource = relative(baseDirectory, themeSource).replaceAll(
+		"\\",
+		"/",
+	);
+	const themeSourcePrefix = relativeSource
+		? relativeSource.startsWith(".")
+			? relativeSource
+			: `./${relativeSource}`
+		: ".";
+	const themeSrc = `${themeSourcePrefix}/`;
+	return {
+		"@/*": [`${themeSrc}*`],
+		"@components/*": [`${themeSrc}components/*`],
+		"@utils/*": [`${themeSrc}utils/*`],
+		"@layouts/*": [`${themeSrc}layouts/*`],
+		"@i18n/*": [`${themeSrc}i18n/*`],
+		"@constants/*": [`${themeSrc}constants/*`],
+		"@assets/*": [`${themeSrc}assets/*`],
+	};
+}
+
 async function ensureTsConfig(packageName, { force }) {
 	const tsconfigPath = join(CWD, "tsconfig.json");
-	const themeSrc = `./node_modules/${packageName}/src`;
-
-	const desiredPaths = {
-		"@/*": [`${themeSrc}/*`],
-		"@components/*": [`${themeSrc}/components/*`],
-		"@utils/*": [`${themeSrc}/utils/*`],
-		"@layouts/*": [`${themeSrc}/layouts/*`],
-		"@i18n/*": [`${themeSrc}/i18n/*`],
-		"@constants/*": [`${themeSrc}/constants/*`],
-		"@assets/*": [`${themeSrc}/assets/*`],
-	};
-
 	if (!existsSync(tsconfigPath)) {
+		const desiredPaths = getThemeTsConfigPaths(packageName, ".");
 		const tsconfig = {
 			extends: "astro/tsconfigs/strict",
 			include: [".astro/types.d.ts", "**/*"],
@@ -520,30 +764,48 @@ async function ensureTsConfig(packageName, { force }) {
 				paths: desiredPaths,
 			},
 		};
-		await writeFile(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`, "utf8");
+		await writeFile(
+			tsconfigPath,
+			`${JSON.stringify(tsconfig, null, 2)}\n`,
+			"utf8",
+		);
 		log.ok("tsconfig.json");
 		return;
 	}
 
-	const tsconfig = JSON.parse(await readFile(tsconfigPath, "utf8"));
-	tsconfig.compilerOptions ??= {};
-	tsconfig.compilerOptions.baseUrl ??= ".";
-	tsconfig.compilerOptions.paths ??= {};
+	const { source, hasBom, compilerOptions, currentPaths, jsonc } =
+		await readJsoncTsConfig(tsconfigPath);
+	const baseUrl = compilerOptions?.baseUrl ?? ".";
+	const desiredPaths = getThemeTsConfigPaths(packageName, baseUrl);
+	const formattingOptions = inferJsoncFormattingOptions(source);
+	let updated = source;
+	const setJsoncValue = (path, value) => {
+		updated = jsonc.applyEdits(
+			updated,
+			jsonc.modify(updated, path, value, { formattingOptions }),
+		);
+	};
 
-	let changed = false;
+	if (compilerOptions?.baseUrl == null) {
+		setJsoncValue(["compilerOptions", "baseUrl"], ".");
+	}
 	for (const [key, value] of Object.entries(desiredPaths)) {
-		if (!tsconfig.compilerOptions.paths[key] || force) {
-			tsconfig.compilerOptions.paths[key] = value;
-			changed = true;
+		if (!Object.hasOwn(currentPaths ?? {}, key) || force) {
+			setJsoncValue(["compilerOptions", "paths", key], value);
 		}
 	}
-	if (changed) {
-		if (force) await backup("tsconfig.json");
-		await writeFile(tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`, "utf8");
-		log.ok(force ? "tsconfig.json (theme path aliases; previous copy backed up)" : "tsconfig.json (theme path aliases)");
-	} else {
+
+	if (updated === source) {
 		log.skip("tsconfig.json already configured");
+		return;
 	}
+	if (force) await backup("tsconfig.json");
+	await writeFile(tsconfigPath, `${hasBom ? "\uFEFF" : ""}${updated}`, "utf8");
+	log.ok(
+		force
+			? "tsconfig.json (theme path aliases; previous copy backed up)"
+			: "tsconfig.json (theme path aliases)",
+	);
 }
 
 /** Every filename Astro will load a config from, in its own resolution order. */
@@ -579,7 +841,9 @@ async function replaceDirectory(from, to) {
 	await mkdir(dirname(to), { recursive: true });
 	await cp(from, to, { recursive: true, force: true });
 	const label = relative(CWD, to) || ".";
-	log.ok(saved ? `${label} replaced (--force), kept a copy at ${saved}` : label);
+	log.ok(
+		saved ? `${label} replaced (--force), kept a copy at ${saved}` : label,
+	);
 	return { copied: true, saved };
 }
 
@@ -589,25 +853,251 @@ async function replaceDirectory(from, to) {
  * `pnpm create astro` always leaves a config behind, so "skip if it exists"
  * silently produced a project where the integration was never registered —
  * Astro then served its own starter page and the theme appeared to do nothing.
- * A config that does not mention the package is therefore replaced (the old one
- * is kept as a backup); a config that already wires the theme in is left alone.
+ * A config with no real import of the package is replaced (the old one is
+ * kept as a backup). A recognizable static import or CommonJS require plus a
+ * call in an inline `integrations` array is left alone; indirect wiring is
+ * preserved with a warning rather than guessed from an arbitrary mention.
  */
+function stripJavaScriptComments(source) {
+	let output = "";
+	let quote = null;
+	let escaped = false;
+	let lineComment = false;
+	let blockComment = false;
+
+	for (let i = 0; i < source.length; i += 1) {
+		const char = source[i];
+		const next = source[i + 1];
+
+		if (lineComment) {
+			if (char === "\n") {
+				output += "\n";
+				lineComment = false;
+			} else {
+				output += " ";
+			}
+			continue;
+		}
+		if (blockComment) {
+			if (char === "*" && next === "/") {
+				output += "  ";
+				i += 1;
+				blockComment = false;
+			} else {
+				output += char === "\n" ? "\n" : " ";
+			}
+			continue;
+		}
+		if (quote) {
+			output += char;
+			if (escaped) escaped = false;
+			else if (char === "\\") escaped = true;
+			else if (char === quote) quote = null;
+			continue;
+		}
+		if (char === "'" || char === '"' || char === "`") {
+			quote = char;
+			output += char;
+		} else if (char === "/" && next === "/") {
+			output += "  ";
+			i += 1;
+			lineComment = true;
+		} else if (char === "/" && next === "*") {
+			output += "  ";
+			i += 1;
+			blockComment = true;
+		} else {
+			output += char;
+		}
+	}
+	return output;
+}
+
+function maskJavaScriptStrings(source) {
+	let output = "";
+	let quote = null;
+	let escaped = false;
+	// Regex matches later use offsets from `source`, so iterate UTF-16 code
+	// units rather than Unicode code points (for...of would shrink emoji).
+	for (let index = 0; index < source.length; index += 1) {
+		const char = source[index];
+		if (quote) {
+			output += char === "\n" ? "\n" : " ";
+			if (escaped) escaped = false;
+			else if (char === "\\") escaped = true;
+			else if (char === quote) quote = null;
+		} else if (char === "'" || char === '"' || char === "`") {
+			quote = char;
+			output += " ";
+		} else {
+			output += char;
+		}
+	}
+	if (output.length !== source.length) {
+		throw new Error("Astro config string mask changed the source length.");
+	}
+	return output;
+}
+
+function matchingSquareBracket(source, open) {
+	let depth = 0;
+	for (let i = open; i < source.length; i += 1) {
+		if (source[i] === "[") depth += 1;
+		else if (source[i] === "]") {
+			depth -= 1;
+			if (depth === 0) return i;
+		}
+	}
+	return -1;
+}
+
+function escapeRegExp(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Return whether the package is wired in, not merely mentioned in a comment.
+ * `uncertain` means a real package import exists but the integration list is
+ * indirect; in that case init preserves the config and asks the user to check it.
+ */
+function astroConfigThemeStatus(source, packageName) {
+	const code = stripJavaScriptComments(source);
+	const codeWithoutStrings = maskJavaScriptStrings(code);
+	const targets = [];
+	let referencesPackage = false;
+	let referencesLocalModule = false;
+	const isLocalSpecifier = (specifier) =>
+		specifier.startsWith(".") ||
+		specifier.startsWith("/") ||
+		specifier.startsWith("@/") ||
+		specifier.startsWith("~/") ||
+		specifier.startsWith("#");
+	const modulePattern =
+		/\b(import|export)\s+([\s\S]*?)\s+from\s*(["'])([^"']+)\3/g;
+
+	for (const match of code.matchAll(modulePattern)) {
+		const keyword = match[1];
+		if (
+			codeWithoutStrings.slice(match.index, match.index + keyword.length) !==
+			keyword
+		)
+			continue;
+		const clause = match[2];
+		const specifier = match[4];
+		if (/^\s*type\s+(?=[A-Za-z_$*{])/.test(clause)) continue;
+		if (specifier !== packageName) {
+			if (isLocalSpecifier(specifier)) referencesLocalModule = true;
+			continue;
+		}
+
+		referencesPackage = true;
+		// Re-exports make the package visible but do not reveal whether an
+		// integration value is registered in this config.
+		if (keyword === "export") continue;
+
+		const defaultBinding = /^\s*([A-Za-z_$][\w$]*)/.exec(clause);
+		if (defaultBinding) targets.push(defaultBinding[1]);
+		const named = /\{([^}]*)\}/.exec(clause)?.[1];
+		if (named) {
+			for (const item of named.split(",")) {
+				const binding = /^\s*shirones(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/.exec(
+					item,
+				);
+				if (binding) targets.push(binding[1] ?? "shirones");
+			}
+		}
+		const namespace = /\*\s+as\s+([A-Za-z_$][\w$]*)/.exec(clause)?.[1];
+		if (namespace) {
+			targets.push(`${namespace}.default`, `${namespace}.shirones`);
+		}
+	}
+
+	const sideEffectImportPattern = /\bimport\s*(["'])([^"']+)\1/g;
+	for (const match of code.matchAll(sideEffectImportPattern)) {
+		if (codeWithoutStrings.slice(match.index, match.index + 6) !== "import")
+			continue;
+		if (match[2] === packageName) referencesPackage = true;
+		else if (isLocalSpecifier(match[2])) referencesLocalModule = true;
+	}
+
+	const dynamicImportPattern = /\bimport\s*\(\s*(["'])([^"']+)\1\s*\)/g;
+	for (const match of code.matchAll(dynamicImportPattern)) {
+		if (codeWithoutStrings.slice(match.index, match.index + 6) !== "import")
+			continue;
+		if (match[2] === packageName) referencesPackage = true;
+		else if (isLocalSpecifier(match[2])) referencesLocalModule = true;
+	}
+
+	const escapedPackageName = escapeRegExp(packageName);
+	const requirePattern = new RegExp(
+		`\\brequire\\s*\\(\\s*(["'])${escapedPackageName}\\1\\s*\\)`,
+		"g",
+	);
+	for (const match of code.matchAll(requirePattern)) {
+		if (codeWithoutStrings.slice(match.index, match.index + 7) !== "require")
+			continue;
+		referencesPackage = true;
+	}
+	const localRequirePattern =
+		/\brequire\s*\(\s*(["'])(\.{1,2}\/[^"']+|\/[^"']+|@\/[^"']+|~\/[^"']+|#[^"']+)\1\s*\)/g;
+	for (const match of code.matchAll(localRequirePattern)) {
+		if (codeWithoutStrings.slice(match.index, match.index + 7) === "require") {
+			referencesLocalModule = true;
+		}
+	}
+
+	if (!referencesPackage) {
+		return referencesLocalModule ? "uncertain" : "not-wired";
+	}
+	const integrations = /\bintegrations\s*:\s*\[/.exec(codeWithoutStrings);
+	if (!integrations) return "uncertain";
+	const open = codeWithoutStrings.indexOf("[", integrations.index);
+	const close = matchingSquareBracket(codeWithoutStrings, open);
+	if (close === -1) return "uncertain";
+	const list = codeWithoutStrings.slice(open + 1, close);
+	const listSource = code.slice(open + 1, close);
+	const hasStaticCall = targets.some((target) => {
+		const expression = target.split(".").join("\\s*\\.\\s*");
+		return new RegExp(`\\b${expression}\\s*\\(`).test(list);
+	});
+	const requireCallPattern = new RegExp(
+		`\\brequire\\s*\\(\\s*(["'])${escapedPackageName}\\1\\s*\\)` +
+			"\\s*(?:\\.\\s*(?:default|shirones)\\s*)?\\s*\\(",
+		"g",
+	);
+	const hasRequireCall = [...listSource.matchAll(requireCallPattern)].some(
+		(match) => list.slice(match.index, match.index + 7) === "require",
+	);
+	return hasStaticCall || hasRequireCall ? "wired" : "uncertain";
+}
+
 async function ensureAstroConfig(packageName, { force }) {
-	const present = ASTRO_CONFIG_FILENAMES.filter((name) => existsSync(join(CWD, name)));
+	const present = ASTRO_CONFIG_FILENAMES.filter((name) =>
+		existsSync(join(CWD, name)),
+	);
 	const target = join(CWD, "astro.config.mjs");
 
 	for (const name of present) {
 		const current = await readFile(join(CWD, name), "utf8");
-		const wired = current.includes(packageName) || current.includes("shirones");
+		const status = astroConfigThemeStatus(current, packageName);
 
-		if (wired && !force) {
+		if (status === "wired" && !force) {
 			log.skip(`${name} already wires the theme in`);
+			return;
+		}
+		if (status === "uncertain" && !force) {
+			log.warn(
+				`${name} may wire ${packageName} indirectly, but init could not confirm ` +
+					"its registration; left it unchanged — check that the theme is registered.",
+			);
 			return;
 		}
 
 		const saved = await backup(name);
-		if (wired) {
-			log.ok(`${name} already wires the theme in — replaced with the template (--force), kept a copy at ${saved}`);
+		if (status === "wired") {
+			log.ok(
+				`${name} already wires the theme in — replaced with the template (--force), kept a copy at ${saved}`,
+			);
 		} else {
 			log.warn(`${name} did not register the theme — kept a copy at ${saved}`);
 		}
@@ -644,11 +1134,11 @@ async function clearStarterFiles() {
 		if (relativePath.endsWith(".astro")) {
 			const contents = await readFile(file, "utf8");
 			const isStarter =
-				contents.includes("Welcome") ||
-				contents.includes("astro.build") ||
-				contents.includes("<slot />");
+				contents.includes("Welcome") || contents.includes("astro.build");
 			if (!isStarter) {
-				log.warn(`${relativePath} is yours — left in place, but it overrides the theme`);
+				log.warn(
+					`${relativePath} is yours — left in place, but it overrides the theme`,
+				);
 				continue;
 			}
 		}
@@ -663,7 +1153,9 @@ async function clearStarterFiles() {
 	// A `src/pages/` that still holds routes shadows the theme's own pages.
 	const pagesDir = join(CWD, "src/pages");
 	if (existsSync(pagesDir)) {
-		const leftovers = (await readdir(pagesDir)).filter((name) => !name.startsWith("."));
+		const leftovers = (await readdir(pagesDir)).filter(
+			(name) => !name.startsWith("."),
+		);
 		if (leftovers.length > 0) {
 			log.warn(
 				`src/pages/ still contains ${leftovers.join(", ")} — ` +
@@ -682,7 +1174,8 @@ async function listRelative(dir) {
 	for (const entry of await readdir(dir, { withFileTypes: true })) {
 		const full = join(dir, entry.name);
 		if (entry.isDirectory()) {
-			for (const sub of await listRelative(full)) out.push(join(entry.name, sub));
+			for (const sub of await listRelative(full))
+				out.push(join(entry.name, sub));
 		} else {
 			out.push(entry.name);
 		}
@@ -693,7 +1186,8 @@ async function listRelative(dir) {
 /** Top-level `export … NAME` declarations in a TypeScript source. */
 function tsExportNames(src) {
 	const names = new Set();
-	const re = /^\s*export\s+(?:const|let|var|function|class|type|interface|enum)\s+([A-Za-z0-9_$]+)/gm;
+	const re =
+		/^\s*export\s+(?:const|let|var|function|class|type|interface|enum)\s+([A-Za-z0-9_$]+)/gm;
 	for (const m of src.matchAll(re)) names.add(m[1]);
 	return names;
 }
@@ -772,6 +1266,90 @@ function topKeys(body) {
 	return keys;
 }
 
+/** Top-level field values, normalized only for whitespace, not string content. */
+function topFieldValues(body) {
+	const fields = new Map();
+	let depth = 0;
+	let fieldName = null;
+	let valueStart = -1;
+	let i = 0;
+	const save = (end) => {
+		if (fieldName !== null) {
+			fields.set(
+				fieldName,
+				body.slice(valueStart, end).replace(/\s+/g, " ").trim(),
+			);
+			fieldName = null;
+		}
+	};
+	while (i < body.length) {
+		const ch = body[i];
+		if (ch === '"' || ch === "'" || ch === "`") {
+			i = skipString(body, i) + 1;
+			continue;
+		}
+		if (ch === "/" && body[i + 1] === "/") {
+			while (i < body.length && body[i] !== "\n") i++;
+			continue;
+		}
+		if (ch === "/" && body[i + 1] === "*") {
+			const end = body.indexOf("*/", i + 2);
+			i = end === -1 ? body.length : end + 2;
+			continue;
+		}
+		if (ch === "{" || ch === "[" || ch === "(") {
+			depth++;
+			i++;
+			continue;
+		}
+		if (ch === "}" || ch === "]" || ch === ")") {
+			depth--;
+			i++;
+			continue;
+		}
+		if (depth === 0 && fieldName === null && ch === ":") {
+			let j = i - 1;
+			while (j >= 0 && /\s/.test(body[j])) j--;
+			let k = j;
+			while (k >= 0 && /[A-Za-z0-9_$]/.test(body[k])) k--;
+			const key = body.slice(k + 1, j + 1);
+			if (key && !/^\d+$/.test(key)) {
+				fieldName = key;
+				valueStart = i + 1;
+			}
+		}
+		if (depth === 0 && ch === ",") save(i);
+		i++;
+	}
+	save(body.length);
+	return fields;
+}
+
+/** Values for every `export const NAME = …{…}` object in a source. */
+function objectFieldValues(src) {
+	const fields = new Map();
+	const re = /export\s+const\s+([A-Za-z0-9_$]+)/g;
+	for (const m of src.matchAll(re)) {
+		let open = -1;
+		for (let i = m.index + m[0].length; i < src.length; i++) {
+			const ch = src[i];
+			if (ch === '"' || ch === "'" || ch === "`") {
+				i = skipString(src, i);
+				continue;
+			}
+			if (ch === "{") {
+				open = i;
+				break;
+			}
+		}
+		if (open !== -1) {
+			const body = balancedBody(src, open);
+			if (body !== null) fields.set(m[1], topFieldValues(body));
+		}
+	}
+	return fields;
+}
+
 /**
  * Top-level keys of every `export const NAME = …{…}` object in a source.
  * The declaration may carry a type annotation and wrap the object in a call
@@ -790,7 +1368,7 @@ function objectFieldKeys(src) {
 				i = skipString(src, i);
 				continue;
 			}
-			if (ch === "{" ) {
+			if (ch === "{") {
 				open = i;
 				break;
 			}
@@ -814,6 +1392,8 @@ async function diffConfigFile(tplPath, usrPath) {
 
 	const tplFields = objectFieldKeys(tpl);
 	const usrFields = objectFieldKeys(usr);
+	const tplValues = objectFieldValues(tpl);
+	const usrValues = objectFieldValues(usr);
 	const missingFields = {};
 	for (const [name, keys] of tplFields) {
 		const usr = usrFields.get(name) ?? new Set();
@@ -826,8 +1406,22 @@ async function diffConfigFile(tplPath, usrPath) {
 		const extra = [...keys].filter((k) => !tplSet.has(k));
 		if (extra.length) extraFields[name] = extra;
 	}
+	const changedFields = {};
+	for (const [name, values] of tplValues) {
+		const userValues = usrValues.get(name) ?? new Map();
+		const changed = [...values.keys()].filter(
+			(key) => userValues.has(key) && userValues.get(key) !== values.get(key),
+		);
+		if (changed.length) changedFields[name] = changed;
+	}
 
-	return { missingExports, extraExports, missingFields, extraFields };
+	return {
+		missingExports,
+		extraExports,
+		missingFields,
+		extraFields,
+		changedFields,
+	};
 }
 
 /** Collect the differences between the template config and the user's copy. */
@@ -844,7 +1438,9 @@ async function checkState() {
 	const stale = usrFiles.filter((f) => !tplSet.has(f)).sort();
 
 	const fieldDiffs = [];
-	for (const rel of tplFiles.filter((f) => f.endsWith(".ts") && usrSet.has(f))) {
+	for (const rel of tplFiles.filter(
+		(f) => f.endsWith(".ts") && usrSet.has(f),
+	)) {
 		const diff = await diffConfigFile(
 			join(tplConfig, rel),
 			join(usrConfig, rel),
@@ -853,7 +1449,8 @@ async function checkState() {
 			diff.missingExports.length ||
 			diff.extraExports.length ||
 			Object.keys(diff.missingFields).length ||
-			Object.keys(diff.extraFields).length
+			Object.keys(diff.extraFields).length ||
+			Object.keys(diff.changedFields).length
 		) {
 			fieldDiffs.push({ rel, ...diff });
 		}
@@ -883,36 +1480,64 @@ async function checkAndUpdate(packageName, { apply }) {
 		missingRoot.length === 0;
 
 	if (clean) {
-		console.log(`\n${colours.green}${colours.bold}Up to date.${colours.reset}\n`);
+		console.log(
+			`\n${colours.green}${colours.bold}Up to date.${colours.reset}\n`,
+		);
 		if (!apply) return;
 	} else {
 		const total =
 			missing.length + stale.length + fieldDiffs.length + missingRoot.length;
-		console.log(`\n${colours.bold}Found ${total} difference(s) from the template:${colours.reset}\n`);
+		console.log(
+			`\n${colours.bold}Found ${total} difference(s) from the template:${colours.reset}\n`,
+		);
 
 		if (missing.length) {
-			log.warn(`${missing.length} file(s) missing from ${CONTENT_ROOT}/config/`);
-			for (const f of missing) console.log(`    ${colours.dim}− ${f}${colours.reset}`);
+			log.warn(
+				`${missing.length} file(s) missing from ${CONTENT_ROOT}/config/`,
+			);
+			for (const f of missing)
+				console.log(`    ${colours.dim}− ${f}${colours.reset}`);
 		}
 		if (missingRoot.length) {
-			log.warn(`${missingRoot.length} root file(s) missing: ${missingRoot.join(", ")}`);
+			log.warn(
+				`${missingRoot.length} root file(s) missing: ${missingRoot.join(", ")}`,
+			);
 		}
 		if (stale.length) {
-			log.warn(`${stale.length} file(s) no longer exist in the template (kept)`);
-			for (const f of stale) console.log(`    ${colours.dim}− ${f}${colours.reset}`);
+			log.warn(
+				`${stale.length} file(s) no longer exist in the template (kept)`,
+			);
+			for (const f of stale)
+				console.log(`    ${colours.dim}− ${f}${colours.reset}`);
 		}
 		for (const d of fieldDiffs) {
-			log.warn(`${join(CONTENT_ROOT, "config", d.rel)} differs from the template`);
-			for (const n of d.missingExports) console.log(`    ${colours.dim}− missing export: ${n}${colours.reset}`);
-			for (const n of d.extraExports) console.log(`    ${colours.dim}− extra export (yours): ${n}${colours.reset}`);
+			log.warn(
+				`${join(CONTENT_ROOT, "config", d.rel)} differs from the template`,
+			);
+			for (const n of d.missingExports)
+				console.log(`    ${colours.dim}− missing export: ${n}${colours.reset}`);
+			for (const n of d.extraExports)
+				console.log(
+					`    ${colours.dim}− extra export (yours): ${n}${colours.reset}`,
+				);
 			for (const [name, keys] of Object.entries(d.missingFields))
-				console.log(`    ${colours.dim}− ${name}: missing field(s): ${keys.join(", ")}${colours.reset}`);
+				console.log(
+					`    ${colours.dim}− ${name}: missing field(s): ${keys.join(", ")}${colours.reset}`,
+				);
 			for (const [name, keys] of Object.entries(d.extraFields))
-				console.log(`    ${colours.dim}− ${name}: field(s) not in template: ${keys.join(", ")}${colours.reset}`);
+				console.log(
+					`    ${colours.dim}− ${name}: field(s) not in template: ${keys.join(", ")}${colours.reset}`,
+				);
+			for (const [name, keys] of Object.entries(d.changedFields))
+				console.log(
+					`    ${colours.dim}− ${name}: value(s) changed: ${keys.join(", ")}${colours.reset}`,
+				);
 		}
 
 		if (!apply) {
-			console.log(`\n${colours.dim}Nothing was changed. Run \`npx shirones init --update\` to restore the missing files and refresh the scaffold.${colours.reset}\n`);
+			console.log(
+				`\n${colours.dim}Nothing was changed. Run \`npx shirones init --update\` to restore the missing files and refresh the scaffold.${colours.reset}\n`,
+			);
 			return;
 		}
 
@@ -926,7 +1551,9 @@ async function checkAndUpdate(packageName, { apply }) {
 					{ force: false, quiet: true },
 				);
 			}
-			log.ok(`${missing.length} file(s) restored under ${CONTENT_ROOT}/config/`);
+			log.ok(
+				`${missing.length} file(s) restored under ${CONTENT_ROOT}/config/`,
+			);
 		}
 	}
 
@@ -939,20 +1566,25 @@ async function checkAndUpdate(packageName, { apply }) {
 		join(CWD, "src/content.config.ts"),
 		{ force: false },
 	);
-	await mergeDirectory(join(TEMPLATE_DIR, "public"), join(CWD, "public"), { force: false });
+	await mergeDirectory(join(TEMPLATE_DIR, "public"), join(CWD, "public"), {
+		force: false,
+	});
 	await mkdir(join(CWD, "src/icons"), { recursive: true });
 	await installRootFiles({ force: false });
 	await ensureTsConfig(packageName, { force: false });
-	const addedDeps = await ensurePackageJson(packageName);
+	const addedDeps = await ensurePackageJson(packageName, {
+		syncPackageManager: true,
+	});
 	await ensurePnpmWorkspace();
 
 	if (addedDeps.length > 0) {
-		await installDependencies();
+		if (!(await installDependencies())) return;
 	} else {
 		log.skip("dependencies already declared");
 	}
 
-	if (!clean) console.log(`\n${colours.green}${colours.bold}Done.${colours.reset}\n`);
+	if (!clean)
+		console.log(`\n${colours.green}${colours.bold}Done.${colours.reset}\n`);
 }
 
 async function init(args) {
@@ -969,6 +1601,10 @@ async function init(args) {
 		return;
 	}
 
+	// Validate user JSONC before any scaffold or backup changes, so a malformed
+	// config cannot leave the project half-initialised.
+	await validateExistingTsConfig();
+
 	// Already initialised? Report drift from the template instead of
 	// re-scaffolding; `--update` repairs the safe bits (never overwrites the
 	// user's files).
@@ -976,7 +1612,9 @@ async function init(args) {
 		return checkAndUpdate(packageName, { apply });
 	}
 
-	console.log(`\n${colours.bold}Shirone${colours.reset} · initialising project`);
+	console.log(
+		`\n${colours.bold}Shirone${colours.reset} · initialising project`,
+	);
 
 	// 1. Content + configuration.
 	//
@@ -1001,7 +1639,9 @@ async function init(args) {
 	if (force) {
 		await replaceDirectory(join(TEMPLATE_DIR, "public"), join(CWD, "public"));
 	} else {
-		await mergeDirectory(join(TEMPLATE_DIR, "public"), join(CWD, "public"), { force: false });
+		await mergeDirectory(join(TEMPLATE_DIR, "public"), join(CWD, "public"), {
+			force: false,
+		});
 	}
 
 	// 2b. Project root files (.env.example, .gitignore, README, editor hints, …).
@@ -1019,8 +1659,9 @@ async function init(args) {
 	// 3b. Starter files from `pnpm create astro` shadow the theme.
 	await clearStarterFiles();
 
-	// 4. `astro-icon` scans this directory for local SVGs; creating it up front
-	//    avoids a confusing ENOENT warning on the first build.
+	// 4. Holds the project's own SVGs, which `vite/icon/collections.ts` turns into
+	//    the `local` icon collection. Created up front so the first build has a
+	//    directory to read rather than a confusing ENOENT.
 	await mkdir(join(CWD, "src/icons"), { recursive: true });
 
 	// 5. Project metadata.
@@ -1031,19 +1672,26 @@ async function init(args) {
 	// 6. If package.json was created or gained dependencies, install them now —
 	//    that is what lets `init` work from a completely empty directory.
 	if (addedDeps.length > 0) {
-		await installDependencies();
+		if (!(await installDependencies())) return;
 	} else {
 		log.skip("dependencies already declared");
 	}
 
 	const postCount = await countFiles(join(CWD, CONTENT_ROOT, "content/posts"));
+	const packageManager = await readPackageManager();
+	const pin = parsePnpmPin(packageManager);
+	const nextCommands = pin
+		? `  ${colours.dim}pnpm dev${colours.reset}
+  ${colours.dim}If that fails: corepack pnpm dev${colours.reset}
+  ${colours.dim}If that also fails: npx --yes pnpm@${pin.spec} dev${colours.reset}`
+		: `  ${colours.dim}pnpm dev${colours.reset}`;
 
 	console.log(`
 ${colours.green}${colours.bold}Done.${colours.reset} ${postCount} example content files installed.
 
 ${colours.bold}Project layout${colours.reset}
   astro.config.mjs          the only Astro config
-  src/content.config.ts     collection definitions
+  src/content.config.ts     inline collection schemas (postSchema, momentSchema, specSchema)
   src/components/           drop a file here to override a theme component
   src/layouts/              …same for layouts
   ${CONTENT_ROOT}/config/            site configuration (TypeScript, fully typed)
@@ -1052,10 +1700,9 @@ ${colours.bold}Project layout${colours.reset}
   public/                   static assets
 
 ${colours.bold}Next${colours.reset}
-  ${colours.dim}pnpm dev${colours.reset}
+${nextCommands}
 `);
 }
-
 
 async function readJsonFile(path) {
 	try {
@@ -1081,7 +1728,9 @@ async function info() {
 	const countImmediateTs = async (dir) => {
 		if (!existsSync(dir)) return 0;
 		const entries = await readdir(dir, { withFileTypes: true });
-		return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".ts")).length;
+		return entries.filter(
+			(entry) => entry.isFile() && entry.name.endsWith(".ts"),
+		).length;
 	};
 	const configModules = await countImmediateTs(tplConfigDir);
 	const dataModules = await countImmediateTs(tplDataDir);
@@ -1111,36 +1760,76 @@ async function info() {
 	const currentNode = process.versions.node.split(".").map(Number);
 	const nodeOkay = nodeMatch
 		? currentNode[0] > Number(nodeMatch[1]) ||
-		  (currentNode[0] === Number(nodeMatch[1]) &&
-			(currentNode[1] > Number(nodeMatch[2]) ||
-				(currentNode[1] === Number(nodeMatch[2]) && currentNode[2] >= Number(nodeMatch[3] ?? 0))))
+			(currentNode[0] === Number(nodeMatch[1]) &&
+				(currentNode[1] > Number(nodeMatch[2]) ||
+					(currentNode[1] === Number(nodeMatch[2]) &&
+						currentNode[2] >= Number(nodeMatch[3] ?? 0))))
 		: null;
-	const nodeStatus = nodeOkay === null ? "" : nodeOkay ? ` ${colours.green}✓${colours.reset}` : ` ${colours.red}✗${colours.reset}`;
+	const nodeStatus =
+		nodeOkay === null
+			? ""
+			: nodeOkay
+				? ` ${colours.green}✓${colours.reset}`
+				: ` ${colours.red}✗${colours.reset}`;
 	const row = (label, value) => console.log(`  ${label.padEnd(20)}${value}`);
-	const section = (title) => console.log(`\n${colours.bold}${title}${colours.reset}`);
+	const section = (title) =>
+		console.log(`\n${colours.bold}${title}${colours.reset}`);
 	const listPreview = (label, values) => {
 		if (values.length === 0) return;
 		const preview = values.slice(0, 4).join(", ");
 		const more = values.length > 4 ? ` (+${values.length - 4} more)` : "";
-		console.log(`    ${colours.dim}${label}: ${preview}${more}${colours.reset}`);
+		console.log(
+			`    ${colours.dim}${label}: ${preview}${more}${colours.reset}`,
+		);
 	};
 
 	console.log(`\n${colours.bold}Shirone project info${colours.reset}`);
 	section("Package");
-	row("package", `${packageName}${packageMeta?.version ? ` v${packageMeta.version}` : ""}`);
+	row(
+		"package",
+		`${packageName}${packageMeta?.version ? ` v${packageMeta.version}` : ""}`,
+	);
 	row("package root", PACKAGE_ROOT);
-	row("template", templatePresent ? `${colours.green}present${colours.reset}` : `${colours.red}MISSING${colours.reset}`);
-	row("manifest", manifest ? `${colours.green}present${colours.reset}` : `${colours.yellow}not available${colours.reset}`);
-	row("upstream", buildInfo?.upstreamSha ? `${buildInfo.upstreamRef ?? "ref"}@${buildInfo.upstreamSha.slice(0, 12)}` : "not recorded");
-	row("built", buildInfo?.builtAt ? `${buildInfo.builtAt} (${buildInfo.node ?? "Node unknown"})` : "not recorded");
+	row(
+		"template",
+		templatePresent
+			? `${colours.green}present${colours.reset}`
+			: `${colours.red}MISSING${colours.reset}`,
+	);
+	row(
+		"manifest",
+		manifest
+			? `${colours.green}present${colours.reset}`
+			: `${colours.yellow}not available${colours.reset}`,
+	);
+	row(
+		"upstream",
+		buildInfo?.upstreamSha
+			? `${buildInfo.upstreamRef ?? "ref"}@${buildInfo.upstreamSha.slice(0, 12)}`
+			: "not recorded",
+	);
+	row(
+		"built",
+		buildInfo?.builtAt
+			? `${buildInfo.builtAt} (${buildInfo.node ?? "Node unknown"})`
+			: "not recorded",
+	);
 	row("Node", `${process.version} / requires ${engine}${nodeStatus}`);
 
 	section("Project");
 	row("project root", CWD);
-	row("status", initialized ? `${colours.green}initialised${colours.reset}` : `${colours.yellow}not initialised${colours.reset}`);
+	row(
+		"status",
+		initialized
+			? `${colours.green}initialised${colours.reset}`
+			: `${colours.yellow}not initialised${colours.reset}`,
+	);
 	row("package dependency", packageDependency);
 	row("package manager", `${detectedManager} (project: ${declaredManager})`);
-	row("content", `${join(CWD, CONTENT_ROOT)} (${contentFiles} files; ${posts} posts, ${moments} moments)`);
+	row(
+		"content",
+		`${join(CWD, CONTENT_ROOT)} (${contentFiles} files; ${posts} posts, ${moments} moments)`,
+	);
 	row("public", `${publicFiles} files`);
 	row("backup", backupFiles ? `${backupFiles} files in ${backupDir}` : "none");
 
@@ -1152,12 +1841,18 @@ async function info() {
 	row("data", `${manifestData} data modules`);
 
 	if (!initialized) {
-		console.log(`\n${colours.dim}Run \`npx shirones init\` to scaffold this project.${colours.reset}\n`);
+		console.log(
+			`\n${colours.dim}Run \`npx shirones init\` to scaffold this project.${colours.reset}\n`,
+		);
 		return;
 	}
 
 	const drift = await checkState();
-	const total = drift.missing.length + drift.stale.length + drift.fieldDiffs.length + drift.missingRoot.length;
+	const total =
+		drift.missing.length +
+		drift.stale.length +
+		drift.fieldDiffs.length +
+		drift.missingRoot.length;
 	section("Drift");
 	if (total === 0) {
 		row("status", `${colours.green}up to date${colours.reset}`);
@@ -1165,9 +1860,14 @@ async function info() {
 		row("status", `${colours.yellow}${total} difference(s)${colours.reset}`);
 		listPreview("missing config", drift.missing);
 		listPreview("stale files kept", drift.stale);
-		listPreview("changed config", drift.fieldDiffs.map((item) => item.rel));
+		listPreview(
+			"changed config",
+			drift.fieldDiffs.map((item) => item.rel),
+		);
 		listPreview("missing root", drift.missingRoot);
-		console.log(`    ${colours.dim}Run \`npx shirones init --update\` to restore safe missing files.${colours.reset}`);
+		console.log(
+			`    ${colours.dim}Run \`npx shirones init --update\` to restore safe missing files.${colours.reset}`,
+		);
 	}
 	console.log();
 }

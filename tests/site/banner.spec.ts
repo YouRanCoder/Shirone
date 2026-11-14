@@ -12,6 +12,21 @@ function isBannerVariant(
 	return decodeURIComponent(value).includes(`/banner/${variant}/`);
 }
 
+function collectBannerRequests(
+	page: import("@playwright/test").Page,
+): string[] {
+	const requests: string[] = [];
+	page.on("request", (request) => {
+		// Only real image loads count: the dev toolbar audits an `<img>` by
+		// fetching its src, and that fetch would otherwise look like a second
+		// banner request. Dedupe because a mutation re-triggers the audit.
+		if (request.resourceType() !== "image") return;
+		const url = request.url();
+		if (isBannerAsset(url) && !requests.includes(url)) requests.push(url);
+	});
+	return requests;
+}
+
 async function waitForBannerState(
 	page: import("@playwright/test").Page,
 	visible: boolean,
@@ -307,6 +322,44 @@ test.describe("banner wallpaper", () => {
 		expect(html).not.toContain("/assets/banner/desktop/1.webp");
 	});
 
+	test("detaches initial picture sources on dark desktop and mobile entries", async ({
+		page,
+	}) => {
+		await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+		for (const viewport of [
+			{ width: 1440, height: 1000 },
+			{ width: 390, height: 844 },
+		]) {
+			await page.setViewportSize(viewport);
+			await page.goto("/", { waitUntil: "domcontentloaded" });
+			await waitForBannerState(page, true);
+			await expect(
+				page.locator(".banner-stage__media picture source"),
+			).toHaveCount(0);
+		}
+	});
+
+	test("detaches initial picture sources after a runtime theme switch", async ({
+		page,
+	}) => {
+		await page.goto("/", { waitUntil: "domcontentloaded" });
+		await waitForBannerState(page, true);
+		await expect(
+			page.locator(".banner-stage__media picture source"),
+		).not.toHaveCount(0);
+		await page.evaluate(() => {
+			document.documentElement.classList.add("dark");
+			window.dispatchEvent(
+				new CustomEvent("shirone:theme-change", {
+					detail: { isDark: true },
+				}),
+			);
+		});
+		await expect(
+			page.locator(".banner-stage__media picture source"),
+		).toHaveCount(0);
+	});
+
 	test("desktop exposes subtitle typewriter controls", async ({ page }) => {
 		await page.goto("/", { waitUntil: "domcontentloaded" });
 		await waitForBannerState(page, true);
@@ -345,10 +398,7 @@ test.describe("banner wallpaper", () => {
 	test("desktop loads only desktop images and types home subtitle", async ({
 		page,
 	}) => {
-		const requests: string[] = [];
-		page.on("request", (request) => {
-			if (isBannerAsset(request.url())) requests.push(request.url());
-		});
+		const requests = collectBannerRequests(page);
 
 		await page.goto("/", { waitUntil: "domcontentloaded" });
 		await waitForBannerState(page, true);
@@ -400,10 +450,7 @@ test.describe("banner wallpaper", () => {
 		page,
 	}) => {
 		await page.setViewportSize({ width: 390, height: 844 });
-		const requests: string[] = [];
-		page.on("request", (request) => {
-			if (isBannerAsset(request.url())) requests.push(request.url());
-		});
+		const requests = collectBannerRequests(page);
 
 		await page.goto("/posts/guide/", { waitUntil: "domcontentloaded" });
 		await waitForBannerState(page, false);
@@ -419,10 +466,7 @@ test.describe("banner wallpaper", () => {
 
 	test("mobile home loads only mobile image resources", async ({ page }) => {
 		await page.setViewportSize({ width: 390, height: 844 });
-		const requests: string[] = [];
-		page.on("request", (request) => {
-			if (isBannerAsset(request.url())) requests.push(request.url());
-		});
+		const requests = collectBannerRequests(page);
 
 		await page.goto("/", { waitUntil: "domcontentloaded" });
 		await waitForBannerState(page, true);
@@ -454,10 +498,7 @@ test.describe("banner wallpaper", () => {
 		await page.addInitScript(() =>
 			localStorage.setItem("wallpaper-mode", "none"),
 		);
-		const requests: string[] = [];
-		page.on("request", (request) => {
-			if (isBannerAsset(request.url())) requests.push(request.url());
-		});
+		const requests = collectBannerRequests(page);
 
 		await page.goto("/", { waitUntil: "domcontentloaded" });
 		await waitForBannerState(page, false);

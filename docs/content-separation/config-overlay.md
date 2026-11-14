@@ -50,16 +50,22 @@ themeColor:
 | `fab.yaml` | `fabConfig` 浮动操作按钮 | `image-bloom.yaml` | `imageBloomConfig` 图片光晕特效 |
 | `footer.yaml` | `footerConfig` 页脚基本信息 | `expressive-code.yaml` | `expressiveCodeConfig` 代码高亮设置 |
 | `llms.yaml` | `llmsConfig` 大模型索引与全文输出 | `umami.yaml` | `umamiConfig` Umami 网站统计 |
+| `friends.yaml` | `friendsConfig` 友情链接 | `moments.yaml` | `momentsConfig` 说说动态 |
+| `albums.yaml` | `albumsConfig` 摄影相册 | `compass.yaml` | `compassConfig` 站点罗盘 |
+| `about.yaml` | `aboutConfig` 关于页 | `games.yaml` | `gamesConfig` 游戏展示 |
+| `permalink.yaml` | `permalinkConfig` 文章固定链接 | `context-menu.yaml` | `contextMenuConfig` 桌面右键增强 |
+| `i18n.yaml` | `i18nConfig` 多语言与本地化 | `series.yaml` | `seriesConfig` 系列连载 |
 
 各配置领域的可用字段、默认值与逐项注释均以代码仓中的 `src/config/<domain>Config.ts` 为准。系统同样支持 `.yml` 后缀；空文件与纯注释文件视作不覆盖。
 
 `config/umami.yaml` 的 `websiteId` 与 `scriptUrl` 是可选的成对字段。省略两者时，`enable` 与 `shareUrl` 仍会启用公开统计读取；只有需要向 Umami 上报访问时才同时填写两者，单独填写任一字段不会加载采集脚本。
 
-`config/comment.yaml` 通过 `provider` 在 Twikoo 与 Giscus 之间二选一。选择 Giscus（基于 GitHub Discussions）时需同时填写 `giscus.repo`、`giscus.repoId` 与 `giscus.categoryId` 三个必填字段（从 giscus.app 配置生成器获取）；任一必填缺失时 `resolveCommentOptions()` 返回 `null`，评论区静默关闭、零额外负担。`giscus.theme` 是明暗双值对象，可以只覆盖 `dark` 一侧，另一侧沿用主题默认值（嵌套对象递归合并）。
+`config/comment.yaml` 通过 `provider` 在 Twikoo、Giscus 与 Waline 之间三选一。选择 Giscus（基于 GitHub Discussions）时需同时填写 `giscus.repo`、`giscus.repoId` 与 `giscus.categoryId` 三个必填字段（从 giscus.app 配置生成器获取）；任一必填缺失时 `resolveCommentOptions()` 返回 `null`，评论区静默关闭、零额外负担。`giscus.theme` 是明暗双值对象，可以只覆盖 `dark` 一侧，另一侧沿用主题默认值（嵌套对象递归合并）。
 
 ### 自定义页脚注入 (`config/footer.html`)
 
 `config/footer.html` 是唯一的非 YAML 入口，用于注入自定义页脚 HTML 代码（如备案号、统计脚本等）。
+
 - 同步时会原样拷贝至 `src/config/FooterConfig.html`；
 - 需要同时在 `footer.yaml` 中配置 `enable: true` 才会真正渲染注入。
 
@@ -118,6 +124,7 @@ customSections:
 ### 2. 常见手滑与格式防呆
 
 系统在解析阶段还会主动识别并拦截以下常见疏漏：
+
 - **只写了键名未填内容**：例如写了 `title:` 但未填写标题文本（YAML 会解析为空值可能导致标题被意外清空），系统会提示显式填写 `""` 或相应默认值；
 - **配置文件名拼写错误**：例如误将文件名保存为 `config/sidbar.yaml`，系统会提示 `Did you mean sidebar.yaml?` 并列出所有合法的配置文件名；
 - **文件名冲突**：同一个配置领域同时存在了 `.yaml` 与 `.yml` 两份文件；
@@ -135,19 +142,24 @@ customSections:
 
 - **写法一：直接引用内置预设（最常用）**  
   只需声明 `preset: 预设名`，系统会自动绑定对应的标准路由、多语言名称和官方图标：
+
   ```yaml
   - preset: Home       # 首页
   - preset: Archive    # 归档
   - preset: Moments    # 动态说说
   ```
+
 - **写法二：基于预设进行局部属性覆盖**  
   在保留预设多语言与图标的同时，覆盖特定属性（例如修改 GitHub 开源仓库地址）：
+
   ```yaml
   - preset: GitHub
     url: https://github.com/your-username/your-repo
   ```
+
 - **写法三：完全自定义独立菜单项与二级下拉菜单**  
   自由定义名称、路径与图标（支持 Material Symbols 或 Iconify 图标库），并可通过 `children` 创建二级子菜单（子菜单递归支持以上所有写法）：
+
   ```yaml
   - name: 留言板
     url: /guestbook/
@@ -163,7 +175,7 @@ customSections:
 
 ### 2. 完整导航预设清单速查表
 
-主题内置了 15 个开箱即用的页面预设（定义于 `src/config/navBarConfig.ts`）：
+主题内置了 17 个开箱即用的页面预设（定义于 `src/config/navBarConfig.ts`）：
 
 | 预设名称 (`preset`) | 目标路由 | 对应功能与页面 |
 | --- | --- | --- |
@@ -176,10 +188,12 @@ customSections:
 | `Skills` | `/skills/` | 个人专业技能清单 |
 | `Projects` | `/projects/` | 开源项目与作品集 |
 | `Devices` | `/devices/` | 我的数字设备与装备 |
+| `Games` | `/games/` | 游戏展示与游玩清单 |
 | `Timeline` | `/timeline/` | 个人经历与大事件时间轴 |
 | `Albums` | `/albums/` | 摄影相册与图库 |
 | `Categories` | `/categories/` | 文章分类聚合独立页 |
 | `Tags` | `/tags/` | 标签聚合独立页 |
+| `Series` | `/series/` | 系列连载聚合独立页 |
 | `About` | `/about/` | 关于博主与站点 |
 | `GitHub` | `https://github.com/...` | GitHub 外部项目外链 |
 

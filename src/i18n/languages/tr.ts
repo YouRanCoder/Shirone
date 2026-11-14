@@ -24,6 +24,16 @@ export const tr: Translation = {
 	[Key.momentsBanner]: "Kısa notlar — hayat, iş ve küçük mutluluklar.",
 	[Key.momentsCount]: "an",
 	[Key.momentsCounts]: "an",
+	[Key.momentPasswordTitle]: "Korumalı an",
+	[Key.momentPasswordDescription]:
+		"Bu an şifrelenmiştir. İçeriğin kilidini açmak için parolayı girin.",
+	[Key.momentPasswordLabel]: "Parola",
+	[Key.momentPasswordShow]: "Parolayı göster",
+	[Key.momentPasswordHide]: "Parolayı gizle",
+	[Key.momentPasswordRequired]: "Bir parola girin",
+	[Key.momentPasswordInvalid]: "Yanlış parola",
+	[Key.momentPasswordUnlock]: "Anın kilidini aç",
+	[Key.momentPasswordUnlocking]: "Şifre çözülüyor…",
 	[Key.pinned]: "Sabitlenen",
 	[Key.loadMore]: "Daha fazla yükle",
 
@@ -90,6 +100,22 @@ export const tr: Translation = {
 	[Key.devicesViewSpecs]: "Detayları gör",
 	[Key.devicesFeatured]: "Öne çıkan",
 
+	[Key.games]: "Oyunlar",
+	[Key.gamesBanner]:
+		"Oynadığım oyunlar — kapak görseli, puan, oynama süresi ve kısa incelemeler.",
+	[Key.gamesCounts]: "oyun",
+	[Key.gamesNoResults]: "Filtrelerle eşleşen oyun yok",
+	[Key.gamesSearchPlaceholder]: "Başlık, geliştirici veya türe göre ara...",
+	[Key.gamesCategoryLabel]: "Oyun kategorileri",
+	[Key.gamesStatusPlaying]: "Oynanıyor",
+	[Key.gamesStatusCompleted]: "Tamamlandı",
+	[Key.gamesStatusBacklog]: "Bekleyen",
+	[Key.gamesStatusWishlist]: "İstek listesi",
+	[Key.gamesViewDetails]: "Mağaza sayfası",
+	[Key.gamesFeatured]: "Öne çıkan",
+	[Key.gamesHours]: "sa",
+	[Key.gamesRating]: "Puan",
+
 	[Key.timeline]: "Zaman Çizelgesi",
 	[Key.timelineBanner]:
 		"Büyüme yolculuğu, kilometre taşları ve unutulmaz anlar.",
@@ -138,6 +164,16 @@ export const tr: Translation = {
 
 	[Key.tags]: "Taglar",
 	[Key.categories]: "Katagoriler",
+	[Key.series]: "Seri",
+	[Key.seriesCount]: "seri",
+	[Key.seriesCounts]: "seri",
+	[Key.seriesStatusOngoing]: "Devam ediyor",
+	[Key.seriesStatusCompleted]: "Tamamlandı",
+	[Key.seriesPartOf]: "Bu yazı serinin bir parçası",
+	[Key.seriesPart]: "{total} bölümün {index}. bölümü",
+	[Key.seriesPrevInSeries]: "Seride önceki",
+	[Key.seriesNextInSeries]: "Seride sonraki",
+	[Key.seriesViewAll]: "Tüm serileri görüntüle",
 	[Key.recentPosts]: "Son Paylaşımlar",
 	[Key.tableOfContents]: "İçindekiler",
 	[Key.formulaScrollable]: "Yatay kaydırılabilir formül",
@@ -152,6 +188,7 @@ export const tr: Translation = {
 	[Key.announcementClose]: "Duyuruyu Kapat",
 
 	[Key.comments]: "Yorumlar",
+	[Key.commentsEditor]: "Yorum içeriği",
 	[Key.commentsLoading]: "Yorumlar yükleniyor...",
 	[Key.commentsLoadFailed]: "Yorumlar yüklenemedi",
 	[Key.commentsRequiresJavaScript]:
@@ -222,7 +259,7 @@ export const tr: Translation = {
 		"Otomatik oynatma engellendi. Başlatmak için oynat düğmesine basın.",
 	[Key.musicErrorInvalidTrack]: "Bu parça geçersiz.",
 
-	[Key.themeColor]: "Theme Color",
+	[Key.themeColor]: "Tema Rengi",
 	[Key.colorStyle]: "Renk Stili",
 	[Key.colorSpec]: "Renk Spesifikasyonu",
 
@@ -249,6 +286,7 @@ export const tr: Translation = {
 	[Key.paginationNext]: "Sonraki sayfa",
 	[Key.paginationPage]: "Sayfa {page}",
 	[Key.paginationJump]: "Sayfaya git",
+	[Key.paginationLabel]: "Sayfalandırma",
 	[Key.tagsViewAll]: "Tüm etiketleri gör",
 
 	[Key.author]: "Yazar",
@@ -256,6 +294,7 @@ export const tr: Translation = {
 	[Key.lastUpdatedNotice]: "Son güncelleme: {date}, {days} gün önce",
 	[Key.lastUpdatedWarning]: "Bazı içerikler güncelliğini yitirmiş olabilir",
 	[Key.license]: "Lisans",
+	[Key.reprintSource]: "Kaynak",
 	[Key.continueReading]: "Okumaya devam et",
 	[Key.relatedReading]: "İlgili yazılar",
 	[Key.relatedReadingSubtitle]: "Ortak etiketlere ve kategorilere göre",
@@ -318,4 +357,13 @@ export const tr: Translation = {
 		"Yeni yazı bildirimleri almak için yukarıdaki bağlantıyı dilediğiniz RSS/Atom okuyucusuna (NetNewsWire, Feedly, Inoreader, Follow vb.) ekleyin.",
 	[Key.feedOpenXml]: "Ham XML'i Görüntüle",
 	[Key.feedRecentPosts]: "Akıştaki Son Yazılar",
+	[Key.menu]: "Menü",
+	[Key.mainNavigation]: "Ana gezinme",
+	[Key.navigationDrawer]: "Gezinme çekmecesi",
+	[Key.breadcrumb]: "Gezinme yolu",
+	[Key.displaySettings]: "Görünüm ayarları",
+	[Key.searchPanel]: "Arama paneli",
+	[Key.lightDarkMode]: "Açık/koyu mod",
+	[Key.resetToDefault]: "Varsayılana sıfırla",
+	[Key.goToAboutPage]: "Hakkında sayfasına git",
 };

@@ -25,6 +25,16 @@ export const vi: Translation = {
 		"Ghi chú ngắn — cuộc sống, công việc và những niềm vui nhỏ.",
 	[Key.momentsCount]: "khoảnh khắc",
 	[Key.momentsCounts]: "khoảnh khắc",
+	[Key.momentPasswordTitle]: "Khoảnh khắc được bảo vệ",
+	[Key.momentPasswordDescription]:
+		"Khoảnh khắc này đã được mã hóa. Nhập mật khẩu để mở khóa nội dung.",
+	[Key.momentPasswordLabel]: "Mật khẩu",
+	[Key.momentPasswordShow]: "Hiện mật khẩu",
+	[Key.momentPasswordHide]: "Ẩn mật khẩu",
+	[Key.momentPasswordRequired]: "Hãy nhập mật khẩu",
+	[Key.momentPasswordInvalid]: "Mật khẩu không đúng",
+	[Key.momentPasswordUnlock]: "Mở khóa khoảnh khắc",
+	[Key.momentPasswordUnlocking]: "Đang giải mã…",
 	[Key.pinned]: "Ghim",
 	[Key.loadMore]: "Tải thêm",
 
@@ -91,6 +101,22 @@ export const vi: Translation = {
 	[Key.devicesViewSpecs]: "Xem chi tiết",
 	[Key.devicesFeatured]: "Nổi bật",
 
+	[Key.games]: "Trò chơi",
+	[Key.gamesBanner]:
+		"Những trò chơi tôi chơi — ảnh bìa, điểm số, thời gian chơi và đánh giá ngắn.",
+	[Key.gamesCounts]: "trò chơi",
+	[Key.gamesNoResults]: "Không có trò chơi phù hợp với bộ lọc",
+	[Key.gamesSearchPlaceholder]: "Tìm theo tên, nhà phát triển hoặc thể loại...",
+	[Key.gamesCategoryLabel]: "Danh mục trò chơi",
+	[Key.gamesStatusPlaying]: "Đang chơi",
+	[Key.gamesStatusCompleted]: "Đã hoàn thành",
+	[Key.gamesStatusBacklog]: "Chờ chơi",
+	[Key.gamesStatusWishlist]: "Danh sách mong muốn",
+	[Key.gamesViewDetails]: "Trang cửa hàng",
+	[Key.gamesFeatured]: "Nổi bật",
+	[Key.gamesHours]: "giờ",
+	[Key.gamesRating]: "Đánh giá",
+
 	[Key.timeline]: "Dòng thời gian",
 	[Key.timelineBanner]:
 		"Hành trình phát triển, các cột mốc và khoảnh khắc đáng nhớ.",
@@ -139,6 +165,16 @@ export const vi: Translation = {
 
 	[Key.tags]: "Thẻ",
 	[Key.categories]: "Danh mục",
+	[Key.series]: "Loạt bài",
+	[Key.seriesCount]: "loạt bài",
+	[Key.seriesCounts]: "loạt bài",
+	[Key.seriesStatusOngoing]: "Đang tiếp tục",
+	[Key.seriesStatusCompleted]: "Đã hoàn thành",
+	[Key.seriesPartOf]: "Bài viết này thuộc loạt bài",
+	[Key.seriesPart]: "Phần {index} / {total}",
+	[Key.seriesPrevInSeries]: "Bài trước trong loạt bài",
+	[Key.seriesNextInSeries]: "Bài tiếp theo trong loạt bài",
+	[Key.seriesViewAll]: "Xem tất cả loạt bài",
 	[Key.recentPosts]: "Bài viết mới nhất",
 	[Key.tableOfContents]: "Mục lục",
 	[Key.formulaScrollable]: "Công thức có thể cuộn ngang",
@@ -153,6 +189,7 @@ export const vi: Translation = {
 	[Key.announcementClose]: "Đóng thông báo",
 
 	[Key.comments]: "Bình luận",
+	[Key.commentsEditor]: "Nội dung bình luận",
 	[Key.commentsLoading]: "Đang tải bình luận...",
 	[Key.commentsLoadFailed]: "Không thể tải bình luận",
 	[Key.commentsRequiresJavaScript]: "Bình luận yêu cầu JavaScript để hiển thị",
@@ -222,7 +259,7 @@ export const vi: Translation = {
 		"Tự động phát đã bị chặn. Nhấn nút phát để bắt đầu.",
 	[Key.musicErrorInvalidTrack]: "Bài hát này không hợp lệ.",
 
-	[Key.themeColor]: "Theme Color",
+	[Key.themeColor]: "Màu chủ đề",
 	[Key.colorStyle]: "Phong cách màu",
 	[Key.colorSpec]: "Đặc tả màu",
 
@@ -249,6 +286,7 @@ export const vi: Translation = {
 	[Key.paginationNext]: "Trang sau",
 	[Key.paginationPage]: "Trang {page}",
 	[Key.paginationJump]: "Đi tới trang",
+	[Key.paginationLabel]: "Phân trang",
 	[Key.tagsViewAll]: "Xem tất cả thẻ",
 
 	[Key.author]: "Tác giả",
@@ -256,6 +294,7 @@ export const vi: Translation = {
 	[Key.lastUpdatedNotice]: "Cập nhật lần cuối vào {date}, cách đây {days} ngày",
 	[Key.lastUpdatedWarning]: "Một số nội dung có thể đã lỗi thời",
 	[Key.license]: "Giấy phép bản quyền",
+	[Key.reprintSource]: "Nguồn",
 	[Key.continueReading]: "Đọc tiếp",
 	[Key.relatedReading]: "Bài viết liên quan",
 	[Key.relatedReadingSubtitle]: "Dựa trên thẻ và danh mục chung",
@@ -317,4 +356,13 @@ export const vi: Translation = {
 		"Thêm URL nguồn cấp ở trên vào trình đọc RSS/Atom yêu thích của bạn (như NetNewsWire, Feedly, Inoreader, Follow) để nhận thông báo bài viết mới.",
 	[Key.feedOpenXml]: "Xem XML gốc",
 	[Key.feedRecentPosts]: "Bài viết mới nhất trong nguồn cấp",
+	[Key.menu]: "Menu",
+	[Key.mainNavigation]: "Điều hướng chính",
+	[Key.navigationDrawer]: "Ngăn điều hướng",
+	[Key.breadcrumb]: "Đường dẫn điều hướng",
+	[Key.displaySettings]: "Cài đặt hiển thị",
+	[Key.searchPanel]: "Bảng tìm kiếm",
+	[Key.lightDarkMode]: "Chế độ sáng/tối",
+	[Key.resetToDefault]: "Đặt lại mặc định",
+	[Key.goToAboutPage]: "Đi đến trang giới thiệu",
 };

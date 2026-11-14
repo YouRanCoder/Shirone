@@ -10,7 +10,7 @@ Shirone 的可选能力(评论、统计、音乐、追番、页脚注入等)遵�
 ## 零额外负担四规则(关闭/未配置/文章禁用时)
 
 1. **零外部网络请求**:不预拉取任何第三方 script/link/font/iframe;
-2. **零 DOM 污染与布局偏移**:不输出占位 DOM、空卡片或额外间距,存量页面 DOM/视觉快照基线 100% 不变;
+2. **零 DOM 污染与布局偏移**:不输出占位 DOM、空卡片或额外间距,存量页面 DOM/视觉快照基线 100% 不变;特性若自带导航/侧栏入口(导航链接、侧栏 widget、页内卡片、sitemap),关闭时必须与页面一起裁剪;
 3. **零 bundle 膨胀**:第三方 SDK 不进主 bundle,按需动态引入;
 4. **存量数据兼容**:内容 Schema 提供安全默认值,禁止强制批量改写存量文章 frontmatter。
 
@@ -25,15 +25,15 @@ Shirone 的可选能力(评论、统计、音乐、追番、页脚注入等)遵�
 
 ## 必读文档
 
-- `docs/on-demand-loading.md` — 四层防护落地做法与验证方法(L1–L3 + 验证)
+- `docs/on-demand-loading.md` — 四层防护落地做法与验证方法(L1–L4 + 验证)
 - `docs/remote-data-system.md` — 远程数据双平面模型与网络契约(冻结规范)
 - `rules/project-rules.md` — §7 零额外负担原则、§11 性能准则
 - `rules/performance-rules.md` — 性能硬性红线
 - `docs/performance-guidelines.md` — 性能架构指南
 - `src/config/README.md` — 配置契约、config/data 判别表、新增配置项流程
 - `docs/umami-guide.md` — Umami share URL、访问采集、客户端 API 与零负担说明
-- 参考实现:`src/config/commentConfig.ts`、`src/components/organisms/comment/CommentSection.astro`、`src/components/organisms/comment/Twikoo.astro`、`src/components/organisms/comment/Giscus.astro`(第二 Provider:一次性 IIFE 脚本注入与主题事件同步的例外模式)、`src/utils/script-loader.ts`
+- 参考实现:`src/config/commentConfig.ts`、`src/components/organisms/comment/CommentSection.astro`、`src/components/organisms/comment/Twikoo.astro`、`src/components/organisms/comment/Giscus.astro`(第二 Provider:一次性 IIFE 脚本注入与主题事件同步的例外模式)、`src/components/organisms/comment/Waline.astro`(第三 Provider:局部内联样式与 M3E token 适配)、`src/utils/waline-runtime.ts`(JS/CSS 按需加载、自定义元素生命周期与 Swup 实例清理)、`src/utils/emoji-tokens.ts` + `src/utils/emoji-input.ts`(表情统一处理 API:按第三方实际渲染规则解析/回写表情,并以其 `<textarea>` 为隐藏模型显示图标)、`src/utils/script-loader.ts`(SDK 去重与可选超时)
 
 ## 验证命令
 
-`npx.cmd astro check` → 关闭状态下 `pnpm.cmd build`,检查产物中无该特性的 CSS/JS/外部请求 → 开启状态跑对应 Playwright 分片(如 `tests/site/comments.spec.ts`)+ `tests/site/a11y.spec.ts` → 有页面级影响时运行 `pnpm.cmd perf:measure` 并记录 LCP/CLS；该脚本目前只测量和打印指标，不会自动执行阈值断言。
+`npx.cmd astro check` → 关闭状态下 `pnpm.cmd build`,按 `docs/on-demand-loading.md` §4 检查页面引用、资源依赖与外部请求 → 开启状态跑对应 Playwright 分片(如 `tests/site/comments.spec.ts`、`tests/site/waline.spec.ts`)+ `tests/site/a11y.spec.ts` → 有页面级影响时运行 `pnpm.cmd perf:measure` 并记录 LCP/CLS；该脚本目前只测量和打印指标，不会自动执行阈值断言。

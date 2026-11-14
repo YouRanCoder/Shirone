@@ -6,8 +6,10 @@ import { animeConfig } from "@/config/animeConfig";
 import { compassConfig } from "@/config/compassConfig";
 import { devicesConfig } from "@/config/devicesConfig";
 import { friendsConfig } from "@/config/friendsConfig";
+import { gamesConfig } from "@/config/gamesConfig";
 import { momentsConfig } from "@/config/momentsConfig";
 import { projectsConfig } from "@/config/projectsConfig";
+import { seriesConfig } from "@/config/seriesConfig";
 import { skillsConfig } from "@/config/skillsConfig";
 import { timelineConfig } from "@/config/timelineConfig";
 import type {
@@ -84,6 +86,12 @@ export const LinkPresets: Record<string, NavBarLink> = {
 		icon: "material-symbols:devices-rounded",
 		pageKey: "devices",
 	},
+	Games: {
+		name: i18n(I18nKey.games),
+		url: "/games/",
+		icon: "material-symbols:sports-esports-outline-rounded",
+		pageKey: "games",
+	},
 	Timeline: {
 		name: i18n(I18nKey.timeline),
 		url: "/timeline/",
@@ -108,6 +116,12 @@ export const LinkPresets: Record<string, NavBarLink> = {
 		icon: "material-symbols:tag-rounded",
 		pageKey: "tags",
 	},
+	Series: {
+		name: i18n(I18nKey.series),
+		url: "/series/",
+		icon: "material-symbols:auto-stories-outline-rounded",
+		pageKey: "series",
+	},
 	About: {
 		name: i18n(I18nKey.about),
 		url: "/about/",
@@ -117,7 +131,7 @@ export const LinkPresets: Record<string, NavBarLink> = {
 	GitHub: {
 		name: "GitHub",
 		url: "https://github.com/LyraVoid/Shirone",
-		icon: "fa6-brands:github",
+		icon: "fa7-brands:github",
 		external: true,
 		pageKey: "github",
 	},
@@ -139,6 +153,7 @@ const defaultNavBarConfig: NavBarConfig = {
 				LinkPresets.Timeline,
 				LinkPresets.Projects,
 				LinkPresets.Devices,
+				LinkPresets.Games,
 				LinkPresets.Skills,
 				// 分类/标签入口不进导航菜单（避免菜单项过多），预设已登记指向独立页面，
 				// 需要时取消注释即可
@@ -176,8 +191,10 @@ const unavailableFeatureRoutes: ReadonlySet<string> = new Set([
 	...(skillsConfig.enable ? [] : ["/skills"]),
 	...(projectsConfig.enable ? [] : ["/projects"]),
 	...(devicesConfig.enable ? [] : ["/devices"]),
+	...(gamesConfig.enable ? [] : ["/games"]),
 	...(timelineConfig.enable ? [] : ["/timeline"]),
 	...(aboutConfig.enable ? [] : ["/about"]),
+	...(seriesConfig.enable ? [] : ["/series"]),
 ]);
 
 /**

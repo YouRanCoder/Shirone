@@ -64,6 +64,8 @@ let dark = $state(
 );
 
 let motionReduced = $state(false);
+// 九宫格色卡在面板首次打开前不计算（9 次配色解算只在用户真正查看时发生）
+let panelOpened = $state(false);
 
 // 文章列表布局（list/grid）：初始值取访客偏好，变化时存储 + FLIP 重排
 const defaultLayoutMode = defaultMode();
@@ -127,7 +129,23 @@ onMount(() => {
 		attributeFilter: ["class"],
 	});
 	motionReduced = getMotionPreference();
-	return () => observer.disconnect();
+	const panel = document.getElementById("display-setting");
+	const panelObserver = new MutationObserver(() => {
+		if (panel?.classList.contains("float-panel-closed")) return;
+		panelOpened = true;
+		panelObserver.disconnect();
+	});
+	if (panel && !panel.classList.contains("float-panel-closed"))
+		panelOpened = true;
+	else if (panel)
+		panelObserver.observe(panel, {
+			attributes: true,
+			attributeFilter: ["class"],
+		});
+	return () => {
+		observer.disconnect();
+		panelObserver.disconnect();
+	};
 });
 
 /** 完整重置：色相 / 配色风格 / Color Spec / 列表布局 / 背景纹理 全部还原为站点默认（点击即生效，无确认弹窗） */
@@ -226,14 +244,16 @@ function styleColors(s: McStyle, h: number, d: boolean, sp: McSpec) {
 }
 
 /** 当前主色（标题右侧预览圆点） */
-const currentColor = $derived(styleColors(style, hue, dark, spec).primary);
+const currentColor = $derived(
+	panelOpened ? styleColors(style, hue, dark, spec).primary : "transparent",
+);
 
 /** 9 个风格的色卡预览（3×3 网格） */
 const stylePreviews = $derived(
 	MC_STYLES.map((s) => ({
 		style: s,
 		label: i18n(styleKey(s)),
-		colors: styleColors(s, hue, dark, spec),
+		colors: panelOpened ? styleColors(s, hue, dark, spec) : null,
 	})),
 );
 </script>
@@ -246,9 +266,9 @@ const stylePreviews = $derived(
                 <div class="flex gap-2 font-bold text-lg text-[var(--on-surface)] transition relative ml-3">
                     <AccentBar size="small" class="absolute -left-3 top-[0.33rem]" />
                     {i18n(I18nKey.themeColor)}
-                    <button aria-label="Reset to Default" class="float-control w-7 h-7 rounded-md active:scale-90 will-change-transform flex items-center justify-center"
+                    <button aria-label={i18n(I18nKey.resetToDefault)} class="float-control w-7 h-7 rounded-md active:scale-90 will-change-transform flex items-center justify-center"
                             class:opacity-0={!isDirty} class:pointer-events-none={!isDirty} onclick={confirmReset}>
-                        <Icon icon="fa6-solid:arrow-rotate-left" class="text-[0.875rem]"></Icon>
+                        <Icon icon="fa7-solid:arrow-rotate-left" class="text-[0.875rem]"></Icon>
                     </button>
                 </div>
                 <div class="flex gap-1 items-center">
@@ -281,9 +301,9 @@ const stylePreviews = $derived(
                                 onclick={() => (style = p.style)}
                             >
                                 <span class="m3-style-cell__dots">
-                                    <span class="m3-style-cell__dot" style={`background: ${p.colors.primary}`}></span>
-                                    <span class="m3-style-cell__dot" style={`background: ${p.colors.secondary}`}></span>
-                                    <span class="m3-style-cell__dot" style={`background: ${p.colors.tertiary}`}></span>
+                                    <span class="m3-style-cell__dot" style={p.colors && `background: ${p.colors.primary}`}></span>
+                                    <span class="m3-style-cell__dot" style={p.colors && `background: ${p.colors.secondary}`}></span>
+                                    <span class="m3-style-cell__dot" style={p.colors && `background: ${p.colors.tertiary}`}></span>
                                 </span>
                                 <span class="m3-style-cell__name">{p.label}</span>
                             </button>
